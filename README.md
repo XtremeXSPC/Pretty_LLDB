@@ -25,6 +25,8 @@ The formatters are designed to be generic and will automatically detect and form
 
 - **Linear Containers:** `LinkedList`, `Stack`, `Queue` (and custom variants).
   - Recognizes members like `head`, `top`, `next`, `count`, `size`.
+- **STL Containers:** `std::vector` (libc++ layout).
+  - Shows size, capacity, data pointer, and values preview.
 - **Trees:** Binary Search Trees and other node-based trees.
   - Recognizes `root`, `left`, `right`, `children`, `value`.
 - **Graphs:** Adjacency-list based graphs.
