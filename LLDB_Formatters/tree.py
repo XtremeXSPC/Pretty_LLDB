@@ -16,26 +16,25 @@
 #   - An 'export_tree' command to generate Graphviz .dot files.
 # ---------------------------------------------------------------------- #
 
+import shlex
+
+from .extraction import extract_tree_structure
 from .helpers import (
     Colors,
-    get_raw_pointer,
-    get_value_summary,
+    _get_node_children,
+    _safe_get_node_from_pointer,
     g_config,
     get_child_member_by_names,
+    get_raw_pointer,
+    get_value_summary,
     should_use_colors,
-    _safe_get_node_from_pointer,
-    _get_node_children,
 )
 from .registry import register_summary
 from .strategies import (
-    PreOrderTreeStrategy,
     InOrderTreeStrategy,
     PostOrderTreeStrategy,
+    PreOrderTreeStrategy,
 )
-
-import shlex
-import os
-
 
 # ------------------ Summary Provider for Tree Root ------------------- #
 
@@ -55,11 +54,19 @@ def tree_summary_provider(valobj, internal_dict):
     C_CYAN = Colors.BOLD_CYAN if use_colors else ""
     C_RESET = Colors.RESET if use_colors else ""
     C_RED = Colors.RED if use_colors else ""
+    diagnostics_suffix = ""
+
+    extraction = None
+    if g_config.diagnostics_enabled:
+        extraction = extract_tree_structure(valobj)
+        diagnostics_suffix = extraction.diagnostics.compact_summary()
+        if extraction.is_empty or extraction.error_message:
+            return f"Tree is empty{diagnostics_suffix}"
 
     # Get Tree Root
     root_node_ptr = get_child_member_by_names(valobj, ["root", "m_root", "_root"])
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
-        return "Tree is empty"
+        return f"Tree is empty{diagnostics_suffix}"
 
     # Strategy Selection
     strategy_name = g_config.tree_traversal_strategy
@@ -89,10 +96,12 @@ def tree_summary_provider(valobj, internal_dict):
 
     size_member = get_child_member_by_names(valobj, ["size", "m_size", "count"])
     size_str = ""
-    if size_member:
+    if extraction and extraction.size is not None:
+        size_str = f"{C_GREEN}size = {extraction.size}{C_RESET}, "
+    elif size_member:
         size_str = f"{C_GREEN}size = {size_member.GetValueAsUnsigned()}{C_RESET}, "
 
-    return f"{size_str}[{summary_str}] ({strategy_name})"
+    return f"{size_str}[{summary_str}] ({strategy_name}){diagnostics_suffix}"
 
 
 # ------- Helper to recursively "draw" the tree for 'pptree' commands ------- #
@@ -128,9 +137,7 @@ def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=N
     children = _get_node_children(node)
     for i, child in enumerate(children):
         new_prefix = f"{prefix}{'    ' if is_last else '│   '}"
-        _recursive_preorder_print(
-            child, new_prefix, i == len(children) - 1, result, visited_addrs
-        )
+        _recursive_preorder_print(child, new_prefix, i == len(children) - 1, result, visited_addrs)
 
 
 # ------------ Central dispatcher for all 'pptree' commands ------------ #
@@ -146,9 +153,7 @@ def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
         result.SetError(f"Usage: pptree_{order} <variable_name>")
         return
 
-    frame = (
-        debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    )
+    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
     if not frame.IsValid():
         result.SetError("Cannot execute command: invalid execution context.")
         return
@@ -227,9 +232,7 @@ def export_tree_command(debugger, command, result, internal_dict):
     output_filename = args[1] if len(args) > 1 else "tree.dot"
     traversal_order = args[2].lower() if len(args) > 2 else None
 
-    frame = (
-        debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    )
+    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
     if not frame.IsValid():
         result.SetError("Cannot execute: invalid execution context.")
         return

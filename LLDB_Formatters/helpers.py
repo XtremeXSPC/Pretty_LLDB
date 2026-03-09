@@ -14,6 +14,7 @@
 # ---------------------------------------------------------------------- #
 
 import os
+
 from .config import g_config
 
 
@@ -57,13 +58,34 @@ def type_has_field(type_obj, field_name):
     return False
 
 
+def get_nonsynthetic_value(value):
+    """
+    Returns the non-synthetic backing value when LLDB exposes a synthetic
+    provider for the object. Falls back to the original value otherwise.
+    """
+    if not value or not value.IsValid():
+        return value
+
+    try:
+        nonsynthetic = value.GetNonSyntheticValue()
+        if nonsynthetic and nonsynthetic.IsValid():
+            return nonsynthetic
+    except Exception:
+        pass
+
+    return value
+
+
 def get_child_member_by_names(value, names):
     """
     Attempts to find and return the first valid child member from a list of
     possible common names (e.g., ["_head", "m_head", "head"]).
     """
+    base_value = get_nonsynthetic_value(value)
+    if not base_value or not base_value.IsValid():
+        return None
     for name in names:
-        child = value.GetChildMemberWithName(name)
+        child = base_value.GetChildMemberWithName(name)
         if child and child.IsValid():
             return child
     return None
@@ -146,9 +168,7 @@ def _get_node_children(node_struct):
     children = []
 
     # First, attempt to find an n-ary style 'children' container (e.g., std::vector).
-    children_container = get_child_member_by_names(
-        node_struct, ["children", "m_children"]
-    )
+    children_container = get_child_member_by_names(node_struct, ["children", "m_children"])
     if (
         children_container
         and children_container.IsValid()

@@ -4,12 +4,13 @@ from typing import Dict, List, Optional, Tuple
 from .helpers import (
     _get_node_children,
     _safe_get_node_from_pointer,
+    debug_print,
     get_child_member_by_names,
+    get_nonsynthetic_value,
     get_raw_pointer,
     get_value_summary,
     type_has_field,
 )
-
 
 LINEAR_HEAD_FIELDS = ["head", "m_head", "_head", "top"]
 LINEAR_SIZE_FIELDS = ["count", "size", "m_size", "_size"]
@@ -48,14 +49,16 @@ class ExtractionDiagnostics:
     field_resolutions: List[FieldResolution] = field(default_factory=list)
     warnings: List[ExtractionWarning] = field(default_factory=list)
 
-    def record_resolution(
-        self, role: str, candidates: List[str], matched: Optional[str]
-    ) -> None:
+    def record_resolution(self, role: str, candidates: List[str], matched: Optional[str]) -> None:
+        debug_print(
+            f"[{self.structure_kind}] resolve {role}: matched={matched or '<unresolved>'}, candidates={candidates}"
+        )
         self.field_resolutions.append(
             FieldResolution(role=role, candidates=tuple(candidates), matched=matched)
         )
 
     def warn(self, code: str, message: str) -> None:
+        debug_print(f"[{self.structure_kind}] warning {code}: {message}")
         self.warnings.append(ExtractionWarning(code=code, message=message))
 
     def compact_summary(self) -> str:
@@ -173,9 +176,10 @@ def _resolve_child_field(value, role: str, candidates: List[str], diagnostics):
     matched_name = None
     matched_child = None
 
-    if value and value.IsValid():
+    base_value = get_nonsynthetic_value(value)
+    if base_value and base_value.IsValid():
         for candidate in candidates:
-            child = value.GetChildMemberWithName(candidate)
+            child = base_value.GetChildMemberWithName(candidate)
             if child and child.IsValid():
                 matched_name = candidate
                 matched_child = child
@@ -201,9 +205,10 @@ def _resolve_type_field_name(type_obj, role: str, candidates: List[str], diagnos
 def _resolve_existing_child_name(value, role: str, candidates: List[str], diagnostics):
     matched_name = None
 
-    if value and value.IsValid():
+    base_value = get_nonsynthetic_value(value)
+    if base_value and base_value.IsValid():
         for candidate in candidates:
-            child = value.GetChildMemberWithName(candidate)
+            child = base_value.GetChildMemberWithName(candidate)
             if child and child.IsValid():
                 matched_name = candidate
                 break
@@ -213,17 +218,37 @@ def _resolve_existing_child_name(value, role: str, candidates: List[str], diagno
 
 
 def _safe_num_children(value) -> int:
-    if not value or not value.IsValid():
+    base_value = get_nonsynthetic_value(value)
+    if not base_value or not base_value.IsValid():
         return 0
     try:
-        return value.GetNumChildren()
+        return base_value.GetNumChildren()
     except Exception:
         return 0
 
 
-def extract_linear_structure(
-    valobj, max_items: Optional[int] = None
-) -> ExtractedLinearStructure:
+def detect_structure_kind(valobj) -> Optional[str]:
+    if get_child_member_by_names(valobj, LINEAR_HEAD_FIELDS):
+        return "linear"
+    if get_child_member_by_names(valobj, TREE_ROOT_FIELDS):
+        return "tree"
+    if get_child_member_by_names(valobj, GRAPH_NODE_CONTAINER_FIELDS):
+        return "graph"
+    return None
+
+
+def extract_supported_structure(valobj, max_items: Optional[int] = None):
+    structure_kind = detect_structure_kind(valobj)
+    if structure_kind == "linear":
+        return structure_kind, extract_linear_structure(valobj, max_items=max_items)
+    if structure_kind == "tree":
+        return structure_kind, extract_tree_structure(valobj)
+    if structure_kind == "graph":
+        return structure_kind, extract_graph_structure(valobj)
+    return None, None
+
+
+def extract_linear_structure(valobj, max_items: Optional[int] = None) -> ExtractedLinearStructure:
     diagnostics = ExtractionDiagnostics("linear")
     size_field, size_member = _resolve_child_field(
         valobj, "container_size", LINEAR_SIZE_FIELDS, diagnostics
@@ -252,9 +277,7 @@ def extract_linear_structure(
     first_node = _safe_get_node_from_pointer(head_ptr)
     if not first_node or not first_node.IsValid():
         extraction.error_message = "Error: Could not dereference head pointer."
-        diagnostics.warn(
-            "invalid_head", "The resolved head pointer could not be dereferenced."
-        )
+        diagnostics.warn("invalid_head", "The resolved head pointer could not be dereferenced.")
         return extraction
 
     node_type = first_node.GetType()
@@ -264,9 +287,7 @@ def extract_linear_structure(
     extraction.value_field = _resolve_type_field_name(
         node_type, "node_value", VALUE_FIELDS, diagnostics
     )
-    prev_field = _resolve_type_field_name(
-        node_type, "node_prev", LINEAR_PREV_FIELDS, diagnostics
-    )
+    prev_field = _resolve_type_field_name(node_type, "node_prev", LINEAR_PREV_FIELDS, diagnostics)
     extraction.is_doubly_linked = prev_field is not None
 
     if not extraction.next_field or not extraction.value_field:
@@ -526,4 +547,3 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
     extraction.is_empty = len(extraction.nodes) == 0
 
     return extraction
-

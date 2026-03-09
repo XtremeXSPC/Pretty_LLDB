@@ -28,6 +28,7 @@ from . import linear
 from . import tree
 from . import graph
 from . import web_visualizer
+from . import diagnostics
 from . import registry
 from .helpers import Colors
 
@@ -52,6 +53,9 @@ def formatter_help_command(debugger, command, result, internal_dict):
   formatter_config [{C_ARG}<key> <value>{C_RST}]
     - View or change global settings.
     - Example: `formatter_config tree_traversal_strategy inorder`
+
+  formatter_explain [{C_ARG}<variable>{C_RST}] (alias: `fexplain`)
+    - Shows how the formatter recognized the structure and which fields matched.
 
 {C_CMD}Console Tree Printing:{C_RST}
   pptree [{C_ARG}<variable>{C_RST}] (alias: `pptree_preorder`)
@@ -126,6 +130,7 @@ def __lldb_init_module(debugger, internal_dict):
         # Help and Config
         "formatter_help": "LLDB_Formatters.formatter_help_command",
         "formatter_config": "LLDB_Formatters.config.formatter_config_command",
+        "formatter_explain": "LLDB_Formatters.diagnostics.formatter_explain_command",
         # Console Tree
         "pptree_preorder": "LLDB_Formatters.tree.pptree_preorder_command",
         "pptree_inorder": "LLDB_Formatters.tree.pptree_inorder_command",
@@ -143,6 +148,7 @@ def __lldb_init_module(debugger, internal_dict):
 
     # ----- 4. Register Command Aliases ----- #
     debugger.HandleCommand("command alias fhelp formatter_help")
+    debugger.HandleCommand("command alias fexplain formatter_explain")
     debugger.HandleCommand("command alias pptree pptree_preorder")
     debugger.HandleCommand("command alias webt webtree")
     debugger.HandleCommand("command alias webg webgraph")

@@ -17,10 +17,12 @@ class MockSBValue:
     required by our formatters and strategies to run in a test environment.
     """
 
-    def __init__(self, value=None, children=None, is_pointer=False):
+    def __init__(self, value=None, children=None, is_pointer=False, name="value", type_name="MockType"):
         self._value = value
         self._children = children if children else {}
         self._is_pointer = is_pointer
+        self._name = name
+        self._type_name = type_name
 
         # ----- Mock for the SBType object ----- #
         self._type_mock = Mock()
@@ -63,6 +65,15 @@ class MockSBValue:
 
     def GetAddress(self):
         return self._addr_mock
+
+    def GetNonSyntheticValue(self):
+        return self
+
+    def GetName(self):
+        return self._name
+
+    def GetTypeName(self):
+        return self._type_name
 
 
 class MockSBValueContainer(MockSBValue):

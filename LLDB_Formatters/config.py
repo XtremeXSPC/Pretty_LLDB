@@ -91,9 +91,7 @@ def formatter_config_command(debugger, command, result, internal_dict):
             f"  - debug_enabled: {g_config.debug_enabled} "
             "(Emit verbose formatter debug logs to the LLDB console)"
         )
-        result.AppendMessage(
-            "\nUse 'formatter_config <key> <value>' to change a setting."
-        )
+        result.AppendMessage("\nUse 'formatter_config <key> <value>' to change a setting.")
         return
 
     # Case 2: Wrong number of arguments
@@ -112,9 +110,7 @@ def formatter_config_command(debugger, command, result, internal_dict):
             setattr(g_config, key, value)
             result.AppendMessage(f"Set {key} -> {value}")
         except ValueError:
-            result.SetError(
-                f"Invalid value. '{value_str}' is not a valid integer for '{key}'."
-            )
+            result.SetError(f"Invalid value. '{value_str}' is not a valid integer for '{key}'.")
         except AttributeError:
             result.SetError(f"Unknown setting '{key}'.")
 

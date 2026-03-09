@@ -24,19 +24,18 @@
 # (nodes, edges, addresses) to render it graphically.
 # ---------------------------------------------------------------------- #
 
-from .helpers import debug_print
+import json
+import os
+import shlex
+import tempfile
+import webbrowser
+
 from .extraction import (
     extract_graph_structure,
     extract_linear_structure,
     extract_tree_structure,
 )
-
-import json
-import tempfile
-import webbrowser
-import os
-import shlex
-
+from .helpers import debug_print
 
 # ---------------------------------------------------------------------- #
 # SECTION 1: PRIVATE HELPER FUNCTIONS
@@ -108,6 +107,7 @@ def _build_visjs_data_for_list(valobj):
         "list_size": extracted_list.size if extracted_list.size is not None else 0,
         "is_doubly_linked": extracted_list.is_doubly_linked,
     }
+
 
 def _build_visjs_data_for_graph(valobj):
     """
@@ -223,9 +223,7 @@ def generate_tree_visualization_html(valobj):
             }
         )
     for edge in extracted_tree.edges:
-        edges_data.append(
-            {"from": f"0x{edge.source:x}", "to": f"0x{edge.target:x}"}
-        )
+        edges_data.append({"from": f"0x{edge.source:x}", "to": f"0x{edge.target:x}"})
 
     # ----- UNIFIED INFO TABLE GENERATION ------ #
     info = {
@@ -308,9 +306,7 @@ def _display_html_content(html_content, var_name, result):
     if display_html:
         try:
             display_html(html_content)
-            result.AppendMessage(
-                f"Displayed interactive visualizer for '{var_name}' in a new tab."
-            )
+            result.AppendMessage(f"Displayed interactive visualizer for '{var_name}' in a new tab.")
             return
         except Exception as e:
             debug_print(f"Failed to use CodeLLDB display_html: {e}")
@@ -318,15 +314,11 @@ def _display_html_content(html_content, var_name, result):
     # Fallback for standard terminals
     result.AppendMessage("CodeLLDB API not found. Falling back to a web browser.")
     try:
-        with tempfile.NamedTemporaryFile(
-            "w", delete=False, suffix=".html", encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".html", encoding="utf-8") as f:
             f.write(html_content)
             output_filename = f.name
         webbrowser.open(f"file://{os.path.realpath(output_filename)}")
-        result.AppendMessage(
-            f"Successfully exported visualizer to '{output_filename}'."
-        )
+        result.AppendMessage(f"Successfully exported visualizer to '{output_filename}'.")
     except Exception as e:
         result.SetError(f"Failed to create or open the HTML file: {e}")
 
@@ -343,9 +335,7 @@ def _get_variable_from_command(command, debugger, result):
         return None, None
 
     var_name = args[0]
-    frame = (
-        debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    )
+    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
     if not frame.IsValid():
         result.SetError("Cannot execute command: invalid execution context.")
         return None, None

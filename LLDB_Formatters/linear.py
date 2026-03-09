@@ -13,15 +13,14 @@
 #      summary string.
 # ---------------------------------------------------------------------- #
 
+from .extraction import extract_linear_structure
 from .helpers import (
     Colors,
     get_child_member_by_names,
     get_raw_pointer,
     get_value_summary,
     should_use_colors,
-    g_config,
 )
-from .extraction import extract_linear_structure
 from .registry import register_summary
 
 

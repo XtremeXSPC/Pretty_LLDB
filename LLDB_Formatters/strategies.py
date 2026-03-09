@@ -13,7 +13,7 @@
 # ---------------------------------------------------------------------- #
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple, Any
+from typing import Any, Dict, List, Tuple
 
 # The 'lldb' module is not available in a standard Python interpreter.
 # We use this block to allow type hinting without causing an ImportError
@@ -24,11 +24,11 @@ except ImportError:
     pass
 
 from .helpers import (
+    _get_node_children,
+    _safe_get_node_from_pointer,
     get_child_member_by_names,
     get_raw_pointer,
     get_value_summary,
-    _safe_get_node_from_pointer,
-    _get_node_children,
     type_has_field,
 )
 
@@ -49,9 +49,7 @@ class TraversalStrategy(ABC):
         """
         pass
 
-    def traverse_for_dot(
-        self, root_ptr: "lldb.SBValue"
-    ) -> Tuple[List[str], Dict[str, Any]]:
+    def traverse_for_dot(self, root_ptr: "lldb.SBValue") -> Tuple[List[str], Dict[str, Any]]:
         """
         Traverses a data structure and generates content for a Graphviz .dot file.
         This base implementation is for non-graph structures and can be overridden.
@@ -208,9 +206,7 @@ class TreeTraversalStrategy(TraversalStrategy):
             child_addr = get_raw_pointer(child_ptr)
             if child_addr != 0:
                 dot_lines.append(f"  Node_{node_addr} -> Node_{child_addr};")
-                self._build_dot_recursive(
-                    child_ptr, dot_lines, visited_addrs, traversal_map
-                )
+                self._build_dot_recursive(child_ptr, dot_lines, visited_addrs, traversal_map)
 
 
 # ----------------- Concrete Tree Traversal Strategies ----------------- #
@@ -224,11 +220,7 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
         visited_addrs = set()
 
         def _recursive_traverse(node_ptr):
-            if (
-                not node_ptr
-                or get_raw_pointer(node_ptr) == 0
-                or len(values) >= max_items
-            ):
+            if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -297,11 +289,7 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
         visited_addrs = set()
 
         def _recursive_traverse(node_ptr):
-            if (
-                not node_ptr
-                or get_raw_pointer(node_ptr) == 0
-                or len(values) >= max_items
-            ):
+            if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -417,11 +405,7 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
         visited_addrs = set()
 
         def _recursive_traverse(node_ptr):
-            if (
-                not node_ptr
-                or get_raw_pointer(node_ptr) == 0
-                or len(values) >= max_items
-            ):
+            if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
                 return
 
             node_addr = get_raw_pointer(node_ptr)

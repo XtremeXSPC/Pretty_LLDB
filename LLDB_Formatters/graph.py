@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: graph.py
 #
 # DESCRIPTION:
@@ -11,19 +11,20 @@
 #   - 'GraphNodeSummary': A summary provider for individual graph nodes.
 #   - 'export_graph_command': A custom LLDB command to export a graph
 #     to a Graphviz .dot file.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
-from .helpers import (
-    Colors,
-    get_child_member_by_names,
-    get_value_summary,
-    g_config,
-)
-from .extraction import extract_graph_structure
-from .registry import register_summary, register_synthetic
 import shlex
 
-# ----- Formatter for Graphs (Synthetic Children) ----- #
+from .extraction import extract_graph_structure
+from .helpers import (
+    Colors,
+    g_config,
+    get_child_member_by_names,
+    get_value_summary,
+)
+from .registry import register_summary, register_synthetic
+
+# -------------- Formatter for Graphs (Synthetic Children) -------------- #
 
 
 @register_synthetic(r"^(Custom|My)?Graph<.*>$")
@@ -65,12 +66,8 @@ class GraphProvider:
         Returns a concise one-line text summary for the entire graph object.
         This summary is typically displayed next to the variable name.
         """
-        num_nodes_member = get_child_member_by_names(
-            self.valobj, ["num_nodes", "V", "node_count"]
-        )
-        num_edges_member = get_child_member_by_names(
-            self.valobj, ["num_edges", "E", "edge_count"]
-        )
+        num_nodes_member = get_child_member_by_names(self.valobj, ["num_nodes", "V", "node_count"])
+        num_edges_member = get_child_member_by_names(self.valobj, ["num_edges", "E", "edge_count"])
 
         # Summaries in GUI panels should be colorless.
         summary = "Graph"
@@ -78,10 +75,13 @@ class GraphProvider:
             summary += f" | V = {num_nodes_member.GetValueAsUnsigned()}"
         if num_edges_member:
             summary += f" | E = {num_edges_member.GetValueAsUnsigned()}"
+        if g_config.diagnostics_enabled:
+            extraction = extract_graph_structure(self.valobj)
+            summary += extraction.diagnostics.compact_summary()
         return summary
 
 
-# ----- Summary Formatter for Graph Nodes ----- #
+# ------------------ Summary Formatter for Graph Nodes ------------------ #
 
 
 @register_summary(r"^(Custom|My)?(Graph)?Node<.*>$")
@@ -111,7 +111,9 @@ def graph_node_summary_provider(valobj, internal_dict):
                 neighbor_val = get_child_member_by_names(
                     neighbor_node, ["value", "val", "data", "key"]
                 )
-                neighbor_summaries.append(get_value_summary(neighbor_val))
+                neighbor_summary = get_value_summary(neighbor_val)
+                if neighbor_summary:
+                    neighbor_summaries.append(neighbor_summary)
 
         if neighbor_summaries:
             summary += f" -> [{', '.join(neighbor_summaries)}]"
@@ -121,7 +123,7 @@ def graph_node_summary_provider(valobj, internal_dict):
     return summary
 
 
-# ----- Custom LLDB command 'export_graph' ----- #
+# ----------------- Custom LLDB command 'export_graph' ------------------ #
 
 
 def export_graph_command(debugger, command, result, internal_dict):
@@ -138,9 +140,7 @@ def export_graph_command(debugger, command, result, internal_dict):
     var_name = args[0]
     output_filename = args[1] if len(args) > 1 else "graph.dot"
 
-    frame = (
-        debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    )
+    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
     if not frame.IsValid():
         result.SetError("Cannot execute: invalid execution context.")
         return
