@@ -17,7 +17,9 @@ class MockSBValue:
     required by our formatters and strategies to run in a test environment.
     """
 
-    def __init__(self, value=None, children=None, is_pointer=False, name="value", type_name="MockType"):
+    def __init__(
+        self, value=None, children=None, is_pointer=False, name="value", type_name="MockType"
+    ):
         self._value = value
         self._children = children if children else {}
         self._is_pointer = is_pointer

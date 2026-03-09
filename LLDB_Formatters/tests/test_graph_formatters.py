@@ -8,8 +8,9 @@
 # ---------------------------------------------------------------------- #
 
 import unittest
-from LLDB_Formatters.graph import GraphProvider, graph_node_summary_provider
+
 from LLDB_Formatters.config import g_config
+from LLDB_Formatters.graph import GraphProvider, graph_node_summary_provider
 from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
 
 
@@ -73,7 +74,7 @@ class TestGraphFormatters(unittest.TestCase):
         child_at_1 = provider.get_child_at_index(1)
         # We compare the value, as the mock objects will be different
         self.assertIsNotNone(child_at_1)
-        self.assertEqual(child_at_1.GetSummary(), "20") # type: ignore
+        self.assertEqual(child_at_1.GetSummary(), "20")  # type: ignore
         self.assertIs(child_at_1, self.node_b)  # Should be the exact same object
 
     def test_graph_node_summary_simple(self):

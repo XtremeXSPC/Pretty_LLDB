@@ -77,9 +77,7 @@ class TestLLDBIntegration(unittest.TestCase):
         self.assertIn("Extracted nodes: 3", output)
 
     def test_export_graph_command_creates_dot_output(self):
-        output_file = Path(
-            tempfile.mkdtemp(prefix="graph-export-", dir=RUNTIME_ROOT)
-        ) / "graph.dot"
+        output_file = Path(tempfile.mkdtemp(prefix="graph-export-", dir=RUNTIME_ROOT)) / "graph.dot"
         output = self._run_commands([f"export_graph my_graph {output_file}"])
 
         self.assertIn("Successfully exported graph", output)

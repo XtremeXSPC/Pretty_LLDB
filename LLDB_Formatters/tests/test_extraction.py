@@ -11,12 +11,8 @@ from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
 class TestExtractionLayer(unittest.TestCase):
     def test_extract_linear_structure_collects_nodes_and_diagnostics(self):
         node3 = MockSBValue(30, {"value": MockSBValue(30), "next": None, "prev": None})
-        node2 = MockSBValue(
-            20, {"value": MockSBValue(20), "next": node3, "prev": None}
-        )
-        head = MockSBValue(
-            children={"head": node2, "size": MockSBValue(2)}
-        )
+        node2 = MockSBValue(20, {"value": MockSBValue(20), "next": node3, "prev": None})
+        head = MockSBValue(children={"head": node2, "size": MockSBValue(2)})
 
         extraction = extract_linear_structure(head, max_items=10)
 
@@ -37,14 +33,14 @@ class TestExtractionLayer(unittest.TestCase):
         extraction = extract_linear_structure(head, max_items=10)
 
         self.assertTrue(extraction.cycle_detected)
-        self.assertEqual([warning.code for warning in extraction.diagnostics.warnings], ["cycle_detected"])
+        self.assertEqual(
+            [warning.code for warning in extraction.diagnostics.warnings], ["cycle_detected"]
+        )
 
     def test_extract_tree_structure_builds_nodes_and_edges(self):
         left = MockSBValue(1, {"value": MockSBValue(1)})
         right = MockSBValue(3, {"value": MockSBValue(3)})
-        root = MockSBValue(
-            2, {"left": left, "right": right, "value": MockSBValue(2)}
-        )
+        root = MockSBValue(2, {"left": left, "right": right, "value": MockSBValue(2)})
         tree = MockSBValue(children={"root": root, "size": MockSBValue(3)})
 
         extraction = extract_tree_structure(tree)
@@ -56,9 +52,7 @@ class TestExtractionLayer(unittest.TestCase):
         self.assertEqual(extraction.child_mode, "binary")
 
     def test_extract_graph_structure_builds_directional_edges(self):
-        node_c = MockSBValue(
-            30, {"value": MockSBValue(30), "neighbors": MockSBValueContainer([])}
-        )
+        node_c = MockSBValue(30, {"value": MockSBValue(30), "neighbors": MockSBValueContainer([])})
         node_b = MockSBValue(
             20, {"value": MockSBValue(20), "neighbors": MockSBValueContainer([node_c])}
         )
@@ -80,9 +74,7 @@ class TestExtractionLayer(unittest.TestCase):
 
         self.assertEqual(extraction.nodes_field, "nodes")
         self.assertEqual(extraction.num_nodes, 3)
-        addresses_by_value = {
-            node.value: node.address for node in extraction.nodes
-        }
+        addresses_by_value = {node.value: node.address for node in extraction.nodes}
         self.assertEqual(
             sorted((edge.source, edge.target) for edge in extraction.edges),
             sorted(

@@ -48,7 +48,7 @@ int main() {
 
   auto* tree_node1 = new MyTreeNode<int>{1, nullptr, nullptr};
   auto* tree_node3 = new MyTreeNode<int>{3, nullptr, nullptr};
-  auto* tree_root = new MyTreeNode<int>{2, tree_node1, tree_node3};
+  auto* tree_root  = new MyTreeNode<int>{2, tree_node1, tree_node3};
   MyBinaryTree<int> my_tree{tree_root, 3};
 
   auto* graph_node3 = new MyGraphNode<int>{30, {nullptr, nullptr}};

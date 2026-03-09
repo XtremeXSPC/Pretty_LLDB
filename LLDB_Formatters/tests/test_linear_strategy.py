@@ -8,6 +8,7 @@
 # ---------------------------------------------------------------------- #
 
 import unittest
+
 from LLDB_Formatters.strategies import LinearTraversalStrategy
 from LLDB_Formatters.tests.mock_lldb import MockSBValue
 

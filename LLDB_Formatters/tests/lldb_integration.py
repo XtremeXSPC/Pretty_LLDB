@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "LLDB_Formatters"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -52,9 +51,7 @@ def build_fixture(fixture_name):
 
     source_path = FIXTURES_DIR / fixture_name
     RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
-    build_dir = Path(
-        tempfile.mkdtemp(prefix="fixture-", dir=RUNTIME_ROOT)
-    )
+    build_dir = Path(tempfile.mkdtemp(prefix="fixture-", dir=RUNTIME_ROOT))
     binary_path = build_dir / source_path.stem
 
     compile_cmd = [

@@ -10,10 +10,11 @@
 # ---------------------------------------------------------------------- #
 
 import unittest
+
 from LLDB_Formatters.strategies import (
-    PreOrderTreeStrategy,
     InOrderTreeStrategy,
     PostOrderTreeStrategy,
+    PreOrderTreeStrategy,
 )
 from LLDB_Formatters.tests.mock_lldb import MockSBValue
 
@@ -47,65 +48,34 @@ class TestTreeStrategies(unittest.TestCase):
         # Internal Nodes
         node1 = MockSBValue(1, {"left": node0, "right": node2, "value": MockSBValue(1)})
         node4 = MockSBValue(4, {"left": None, "right": node5, "value": MockSBValue(4)})
-        node12 = MockSBValue(
-            12, {"left": node11, "right": None, "value": MockSBValue(12)}
-        )
-        node17 = MockSBValue(
-            17, {"left": None, "right": node18, "value": MockSBValue(17)}
-        )
+        node12 = MockSBValue(12, {"left": node11, "right": None, "value": MockSBValue(12)})
+        node17 = MockSBValue(17, {"left": None, "right": node18, "value": MockSBValue(17)})
 
         node6 = MockSBValue(6, {"left": node4, "right": node7, "value": MockSBValue(6)})
-        node13 = MockSBValue(
-            13, {"left": node12, "right": None, "value": MockSBValue(13)}
-        )
-        node16 = MockSBValue(
-            16, {"left": None, "right": node17, "value": MockSBValue(16)}
-        )
+        node13 = MockSBValue(13, {"left": node12, "right": None, "value": MockSBValue(13)})
+        node16 = MockSBValue(16, {"left": None, "right": node17, "value": MockSBValue(16)})
 
         node3 = MockSBValue(3, {"left": node1, "right": node6, "value": MockSBValue(3)})
-        node15 = MockSBValue(
-            15, {"left": None, "right": node16, "value": MockSBValue(15)}
-        )
+        node15 = MockSBValue(15, {"left": None, "right": node16, "value": MockSBValue(15)})
 
-        node14 = MockSBValue(
-            14, {"left": node13, "right": node15, "value": MockSBValue(14)}
-        )
+        node14 = MockSBValue(14, {"left": node13, "right": node15, "value": MockSBValue(14)})
 
-        node10 = MockSBValue(
-            10, {"left": node9, "right": node14, "value": MockSBValue(10)}
-        )
+        node10 = MockSBValue(10, {"left": node9, "right": node14, "value": MockSBValue(10)})
 
         # Root
-        cls.root = MockSBValue(
-            8, {"left": node3, "right": node10, "value": MockSBValue(8)}
-        )
+        cls.root = MockSBValue(8, {"left": node3, "right": node10, "value": MockSBValue(8)})
 
     def test_preorder_traversal(self):
         """Verify that the PreOrder strategy produces the correct sequence."""
         strategy = PreOrderTreeStrategy()
         values, _ = strategy.traverse(self.root, max_items=100)
 
+        # fmt: off
         expected = [
-            "8",
-            "3",
-            "1",
-            "0",
-            "2",
-            "6",
-            "4",
-            "5",
-            "7",
-            "10",
-            "9",
-            "14",
-            "13",
-            "12",
-            "11",
-            "15",
-            "16",
-            "17",
-            "18",
+            "8", "3", "1", "0", "2", "6", "4", "5", "7",
+            "10", "9", "14", "13", "12", "11", "15", "16", "17", "18",
         ]
+        # fmt: on
 
         self.assertEqual(values, expected, "PreOrder traversal is incorrect")
 
@@ -114,27 +84,12 @@ class TestTreeStrategies(unittest.TestCase):
         strategy = InOrderTreeStrategy()
         values, _ = strategy.traverse(self.root, max_items=100)
 
+        # fmt: off
         expected = [
-            "0",
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            "10",
-            "11",
-            "12",
-            "13",
-            "14",
-            "15",
-            "16",
-            "17",
-            "18",
+            "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+            "10", "11", "12", "13", "14", "15", "16", "17", "18",
         ]
+        # fmt: on
 
         self.assertEqual(values, expected, "InOrder traversal is incorrect")
 
@@ -143,27 +98,12 @@ class TestTreeStrategies(unittest.TestCase):
         strategy = PostOrderTreeStrategy()
         values, _ = strategy.traverse(self.root, max_items=100)
 
+        # fmt: off
         expected = [
-            "0",
-            "2",
-            "1",
-            "5",
-            "4",
-            "7",
-            "6",
-            "3",
-            "9",
-            "11",
-            "12",
-            "13",
-            "18",
-            "17",
-            "16",
-            "15",
-            "14",
-            "10",
-            "8",
+            "0", "2", "1", "5", "4", "7", "6", "3", "9", "11",
+            "12", "13", "18", "17", "16", "15", "14", "10", "8",
         ]
+        # fmt: on
 
         self.assertEqual(values, expected, "PostOrder traversal is incorrect")
 
@@ -184,15 +124,9 @@ class TestTreeStrategies(unittest.TestCase):
         inorder_vals, _ = InOrderTreeStrategy().traverse(root, 100)
         postorder_vals, _ = PostOrderTreeStrategy().traverse(root, 100)
 
-        self.assertEqual(
-            preorder_vals, expected_values, "PreOrder failed on root-only tree"
-        )
-        self.assertEqual(
-            inorder_vals, expected_values, "InOrder failed on root-only tree"
-        )
-        self.assertEqual(
-            postorder_vals, expected_values, "PostOrder failed on root-only tree"
-        )
+        self.assertEqual(preorder_vals, expected_values, "PreOrder failed on root-only tree")
+        self.assertEqual(inorder_vals, expected_values, "InOrder failed on root-only tree")
+        self.assertEqual(postorder_vals, expected_values, "PostOrder failed on root-only tree")
 
     def test_right_skewed_tree(self):
         """Verify a degenerate tree (like a right-linked list)."""
@@ -217,15 +151,9 @@ class TestTreeStrategies(unittest.TestCase):
 
         values, metadata = strategy.traverse(self.root, max_items)
 
-        self.assertEqual(
-            len(values), max_items, "Incorrect number of items after truncation"
-        )
-        self.assertEqual(
-            values, ["0", "1", "2", "3", "4"], "Incorrect values after truncation"
-        )
-        self.assertTrue(
-            metadata.get("truncated", False), "Truncated flag was not set correctly"
-        )
+        self.assertEqual(len(values), max_items, "Incorrect number of items after truncation")
+        self.assertEqual(values, ["0", "1", "2", "3", "4"], "Incorrect values after truncation")
+        self.assertTrue(metadata.get("truncated", False), "Truncated flag was not set correctly")
 
 
 # This allows running the test file directly.
