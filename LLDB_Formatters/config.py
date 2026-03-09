@@ -30,6 +30,12 @@ class FormatterConfig:
         # Can be changed at runtime to 'inorder', 'postorder', etc.
         self.tree_traversal_strategy = "preorder"
 
+        # Enables compact diagnostics appended to formatter output.
+        self.diagnostics_enabled = False
+
+        # Enables verbose debug prints in the LLDB console.
+        self.debug_enabled = False
+
 
 # Create a single global instance of the configuration object.
 # This instance is imported and used by other modules to access settings.
@@ -44,6 +50,22 @@ def formatter_config_command(debugger, command, result, internal_dict):
       formatter_config <key> <value>  # Set a new value for a setting.
     """
     args = command.split()
+
+    def _parse_bool(value_str):
+        normalized = value_str.strip().lower()
+        truth_map = {
+            "1": True,
+            "true": True,
+            "yes": True,
+            "on": True,
+            "0": False,
+            "false": False,
+            "no": False,
+            "off": False,
+        }
+        if normalized not in truth_map:
+            raise ValueError
+        return truth_map[normalized]
 
     # Case 1: No arguments
     # Print current settings and their descriptions.
@@ -60,6 +82,14 @@ def formatter_config_command(debugger, command, result, internal_dict):
         result.AppendMessage(
             f"  - tree_traversal_strategy: '{g_config.tree_traversal_strategy}' "
             "(Traversal order for tree summaries. Options: preorder, inorder, postorder)"
+        )
+        result.AppendMessage(
+            f"  - diagnostics_enabled: {g_config.diagnostics_enabled} "
+            "(Append compact extraction diagnostics to formatter output)"
+        )
+        result.AppendMessage(
+            f"  - debug_enabled: {g_config.debug_enabled} "
+            "(Emit verbose formatter debug logs to the LLDB console)"
         )
         result.AppendMessage(
             "\nUse 'formatter_config <key> <value>' to change a setting."
@@ -99,6 +129,16 @@ def formatter_config_command(debugger, command, result, internal_dict):
         else:
             result.SetError(
                 f"Invalid value '{value_str}'. Valid options for tree_traversal_strategy are: {', '.join(valid_strategies)}"
+            )
+
+    elif key in ["diagnostics_enabled", "debug_enabled"]:
+        try:
+            value = _parse_bool(value_str)
+            setattr(g_config, key, value)
+            result.AppendMessage(f"Set {key} -> {value}")
+        except ValueError:
+            result.SetError(
+                f"Invalid value '{value_str}'. Valid boolean options are: true, false, on, off, yes, no, 1, 0."
             )
 
     # Handle unknown settings

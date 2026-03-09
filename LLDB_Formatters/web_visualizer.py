@@ -24,14 +24,11 @@
 # (nodes, edges, addresses) to render it graphically.
 # ---------------------------------------------------------------------- #
 
-from .helpers import (
-    get_child_member_by_names,
-    get_raw_pointer,
-    get_value_summary,
-    type_has_field,
-    debug_print,
-    _safe_get_node_from_pointer,
-    _get_node_children,
+from .helpers import debug_print
+from .extraction import (
+    extract_graph_structure,
+    extract_linear_structure,
+    extract_tree_structure,
 )
 
 import json
@@ -82,121 +79,35 @@ def _build_visjs_data_for_list(valobj):
     vis.js visualization in a dictionary.
     Returns None if the list is empty or its structure cannot be determined.
     """
-    head_ptr = get_child_member_by_names(valobj, ["head", "m_head", "_head", "top"])
-    if not head_ptr or get_raw_pointer(head_ptr) == 0:
+    extracted_list = extract_linear_structure(valobj)
+    if extracted_list.error_message or extracted_list.is_empty:
         return None
 
-    first_node = head_ptr.Dereference()
-    if not first_node or not first_node.IsValid():
-        return None
-
-    # Dynamically determine member names for 'next', 'value', and 'prev'
-    node_type = first_node.GetType()
-    next_ptr_name = next(
-        (
-            n
-            for n in ["next", "m_next", "_next", "pNext"]
-            if type_has_field(node_type, n)
-        ),
-        None,
-    )
-    value_name = next(
-        (
-            n
-            for n in ["value", "val", "data", "m_data", "key"]
-            if type_has_field(node_type, n)
-        ),
-        None,
-    )
-    has_prev_field = any(
-        type_has_field(node_type, n) for n in ["prev", "m_prev", "_prev", "pPrev"]
-    )
-
-    if not next_ptr_name or not value_name:
-        debug_print("Could not determine list node structure ('next'/'value' members).")
-        return None
-
-    # Traverse the list and collect node/edge data
-    nodes_data, edges_data, traversal_order, visited_addrs = [], [], [], set()
-    current_ptr = head_ptr
-    while get_raw_pointer(current_ptr) != 0:
-        node_addr = get_raw_pointer(current_ptr)
-        if node_addr in visited_addrs:
-            break  # Cycle detected
-        visited_addrs.add(node_addr)
-        traversal_order.append(f"0x{node_addr:x}")
-
-        node_struct = current_ptr.Dereference()
-        if not node_struct or not node_struct.IsValid():
-            break
-
-        val_summary = get_value_summary(node_struct.GetChildMemberWithName(value_name))
+    nodes_data = []
+    edges_data = []
+    for node in extracted_list.nodes:
         nodes_data.append(
             {
-                "id": f"0x{node_addr:x}",
-                "value": val_summary,
-                "address": f"0x{node_addr:x}",
+                "id": f"0x{node.address:x}",
+                "value": node.value,
+                "address": f"0x{node.address:x}",
             }
         )
-
-        next_node_ptr = node_struct.GetChildMemberWithName(next_ptr_name)
-        if get_raw_pointer(next_node_ptr) != 0:
+        if node.next_address != 0:
             edges_data.append(
                 {
-                    "from": f"0x{node_addr:x}",
-                    "to": f"0x{get_raw_pointer(next_node_ptr):x}",
+                    "from": f"0x{node.address:x}",
+                    "to": f"0x{node.next_address:x}",
                 }
             )
-        current_ptr = next_node_ptr
-
-    size_member = get_child_member_by_names(valobj, ["size", "m_size", "count"])
-    list_size = size_member.GetValueAsUnsigned() if size_member else len(nodes_data)
 
     return {
         "nodes_data": nodes_data,
         "edges_data": edges_data,
-        "traversal_order": traversal_order,
-        "list_size": list_size,
-        "is_doubly_linked": has_prev_field,
+        "traversal_order": extracted_list.traversal_order,
+        "list_size": extracted_list.size if extracted_list.size is not None else 0,
+        "is_doubly_linked": extracted_list.is_doubly_linked,
     }
-
-
-def _build_visjs_data_for_tree(node_ptr, nodes_list, edges_list, visited):
-    """
-    Recursively traverses a tree from the given node pointer to build node
-    and edge lists compatible with vis.js.
-    """
-    node_addr = get_raw_pointer(node_ptr)
-    if not node_ptr or node_addr == 0 or node_addr in visited:
-        return
-
-    visited.add(node_addr)
-    node_struct = _safe_get_node_from_pointer(node_ptr)
-    if not node_struct or not node_struct.IsValid():
-        return
-
-    value = get_child_member_by_names(node_struct, ["value", "val", "data", "key"])
-    val_summary = get_value_summary(value)
-
-    # Add the current node with a detailed tooltip
-    title_str = f"Value: {val_summary}\nAddress: 0x{node_addr:x}"
-    nodes_list.append(
-        {
-            "id": f"0x{node_addr:x}",
-            "label": val_summary,
-            "title": title_str,
-            "address": f"0x{node_addr:x}",
-        }
-    )
-
-    # Recurse on all children (supports both binary and n-ary trees)
-    children = _get_node_children(node_struct)
-    for child_ptr in children:
-        child_addr = get_raw_pointer(child_ptr)
-        if child_addr != 0:
-            edges_list.append({"from": f"0x{node_addr:x}", "to": f"0x{child_addr:x}"})
-            _build_visjs_data_for_tree(child_ptr, nodes_list, edges_list, visited)
-
 
 def _build_visjs_data_for_graph(valobj):
     """
@@ -204,56 +115,30 @@ def _build_visjs_data_for_graph(valobj):
     vis.js visualization in a dictionary.
     Returns None if the graph is empty or its structure cannot be determined.
     """
-    nodes_container = get_child_member_by_names(
-        valobj, ["nodes", "m_nodes", "adj", "adjacency_list"]
-    )
-    if not nodes_container or not nodes_container.MightHaveChildren():
+    extracted_graph = extract_graph_structure(valobj)
+    if extracted_graph.is_empty:
         return None
 
-    # Iterate through all nodes in the graph's adjacency list/vector
-    nodes, edges, visited_edges = [], [], set()
-    for i in range(nodes_container.GetNumChildren()):
-        node = nodes_container.GetChildAtIndex(i)
-        if node.GetType().IsPointerType():
-            node = node.Dereference()
-        if not node or not node.IsValid():
-            continue
-
-        node_addr = get_raw_pointer(node)
-        val_summary = get_value_summary(
-            get_child_member_by_names(node, ["value", "val", "data"])
-        )
-
+    nodes = []
+    edges = []
+    for node in extracted_graph.nodes:
         nodes.append(
             {
-                "id": f"0x{node_addr:x}",
-                "label": val_summary,
-                "title": f"Value: {val_summary}",
-                "address": f"0x{node_addr:x}",
+                "id": f"0x{node.address:x}",
+                "label": node.value,
+                "title": f"Value: {node.value}",
+                "address": f"0x{node.address:x}",
             }
         )
 
-        # Iterate through this node's neighbors to define edges
-        neighbors = get_child_member_by_names(node, ["neighbors", "adj", "edges"])
-        if neighbors and neighbors.MightHaveChildren():
-            for j in range(neighbors.GetNumChildren()):
-                neighbor = neighbors.GetChildAtIndex(j)
-                if neighbor.GetType().IsPointerType():
-                    neighbor = neighbor.Dereference()
-                if not neighbor or not neighbor.IsValid():
-                    continue
-
-                neighbor_addr = get_raw_pointer(neighbor)
-                edge_tuple = tuple(sorted((node_addr, neighbor_addr)))
-                if edge_tuple not in visited_edges:
-                    edges.append(
-                        {
-                            "from": f"0x{node_addr:x}",
-                            "to": f"0x{neighbor_addr:x}",
-                            "arrows": "to",
-                        }
-                    )
-                    visited_edges.add(edge_tuple)
+    for edge in extracted_graph.edges:
+        edges.append(
+            {
+                "from": f"0x{edge.source:x}",
+                "to": f"0x{edge.target:x}",
+                "arrows": "to",
+            }
+        )
     return {"nodes_data": nodes, "edges_data": edges}
 
 
@@ -322,20 +207,32 @@ def generate_tree_visualization_html(valobj):
     for its visualization. Returns None if the tree is empty.
     This function is designed to be imported by other modules (e.g., tree.py).
     """
-    root_node_ptr = get_child_member_by_names(valobj, ["root", "m_root", "_root"])
-    if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
+    extracted_tree = extract_tree_structure(valobj)
+    if extracted_tree.is_empty or extracted_tree.error_message:
         return None
 
-    nodes_data, edges_data, visited_addrs = [], [], set()
-    _build_visjs_data_for_tree(root_node_ptr, nodes_data, edges_data, visited_addrs)
+    nodes_data = []
+    edges_data = []
+    for node in extracted_tree.nodes:
+        nodes_data.append(
+            {
+                "id": f"0x{node.address:x}",
+                "label": node.value,
+                "title": f"Value: {node.value}\nAddress: 0x{node.address:x}",
+                "address": f"0x{node.address:x}",
+            }
+        )
+    for edge in extracted_tree.edges:
+        edges_data.append(
+            {"from": f"0x{edge.source:x}", "to": f"0x{edge.target:x}"}
+        )
 
     # ----- UNIFIED INFO TABLE GENERATION ------ #
-    size_member = get_child_member_by_names(valobj, ["size", "m_size", "count"])
     info = {
         "Variable Name": valobj.GetName(),
         "Type Name": valobj.GetTypeName(),
-        "Size": size_member.GetValueAsUnsigned() if size_member else "N/A",
-        "Root Address": f"0x{get_raw_pointer(root_node_ptr):x}",
+        "Size": extracted_tree.size if extracted_tree.size is not None else "N/A",
+        "Root Address": f"0x{extracted_tree.root_address:x}",
     }
     info_html = "<h3>Tree Information</h3><table>"
     for key, value in info.items():
@@ -355,30 +252,20 @@ def generate_graph_visualization_html(valobj):
     Takes a graph SBValue and returns a complete, self-contained HTML string
     for its visualization. Returns None if data generation fails.
     """
+    extracted_graph = extract_graph_structure(valobj)
+    if extracted_graph.is_empty or extracted_graph.error_message:
+        return None
+
     graph_data = _build_visjs_data_for_graph(valobj)
     if not graph_data:
         return None
 
     # ----- UNIFIED INFO TABLE GENERATION ------ #
-    num_nodes_member = get_child_member_by_names(
-        valobj, ["num_nodes", "V", "node_count"]
-    )
-    num_edges_member = get_child_member_by_names(
-        valobj, ["num_edges", "E", "edge_count"]
-    )
     info = {
         "Variable Name": valobj.GetName(),
         "Type Name": valobj.GetTypeName(),
-        "Nodes (V)": (
-            num_nodes_member.GetValueAsUnsigned()
-            if num_nodes_member
-            else len(graph_data["nodes_data"])
-        ),
-        "Edges (E)": (
-            num_edges_member.GetValueAsUnsigned()
-            if num_edges_member
-            else len(graph_data["edges_data"])
-        ),
+        "Nodes (V)": extracted_graph.num_nodes,
+        "Edges (E)": extracted_graph.num_edges,
     }
     info_html = "<h3>Graph Information</h3><table>"
     for key, value in info.items():

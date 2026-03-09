@@ -16,11 +16,10 @@
 from .helpers import (
     Colors,
     get_child_member_by_names,
-    get_raw_pointer,
     get_value_summary,
-    debug_print,
     g_config,
 )
+from .extraction import extract_graph_structure
 from .registry import register_summary, register_synthetic
 import shlex
 
@@ -158,39 +157,18 @@ def export_graph_command(debugger, command, result, internal_dict):
         result.AppendMessage("Graph is empty or nodes container not found.")
         return
 
+    extracted_graph = extract_graph_structure(graph_val)
+    if extracted_graph.is_empty:
+        result.AppendMessage("Graph is empty or nodes container not found.")
+        return
+
     dot_lines = ["digraph G {", '  rankdir="LR";', "  node [shape=circle];"]
-    edge_lines = set()
-    visited_nodes = set()
+    for node in extracted_graph.nodes:
+        val_summary = node.value.replace('"', '\\"')
+        dot_lines.append(f'  Node_{node.address} [label="{val_summary}"];')
 
-    for i in range(nodes_container.GetNumChildren()):
-        node = nodes_container.GetChildAtIndex(i)
-        if node.GetType().IsPointerType():
-            node = node.Dereference()
-        if not node or not node.IsValid():
-            continue
-
-        node_addr = get_raw_pointer(node)
-        if node_addr not in visited_nodes:
-            visited_nodes.add(node_addr)
-            node_value = get_child_member_by_names(
-                node, ["value", "val", "data", "key"]
-            )
-            val_summary = get_value_summary(node_value).replace('"', '\\"')
-            dot_lines.append(f'  Node_{node_addr} [label="{val_summary}"];')
-
-        neighbors = get_child_member_by_names(node, ["neighbors", "adj", "edges"])
-        if neighbors and neighbors.IsValid():
-            for j in range(neighbors.GetNumChildren()):
-                neighbor = neighbors.GetChildAtIndex(j)
-                if neighbor.GetType().IsPointerType():
-                    neighbor = neighbor.Dereference()
-                if not neighbor or not neighbor.IsValid():
-                    continue
-
-                neighbor_addr = get_raw_pointer(neighbor)
-                edge_lines.add(f"  Node_{node_addr} -> Node_{neighbor_addr};")
-
-    dot_lines.extend(list(edge_lines))
+    for edge in extracted_graph.edges:
+        dot_lines.append(f"  Node_{edge.source} -> Node_{edge.target};")
     dot_lines.append("}")
 
     try:

@@ -7,10 +7,10 @@
 #
 # It follows the new architecture by:
 #   1. Using a 'register_summary' decorator to announce its capability.
-#   2. Employing the 'LinearTraversalStrategy' to decouple the traversal
-#      logic from the presentation logic.
-#   3. Formatting the results from the strategy into a final, user-
-#      facing summary string.
+#   2. Delegating structure discovery and traversal to the shared
+#      extraction layer.
+#   3. Formatting the extracted nodes into a final, user-facing
+#      summary string.
 # ---------------------------------------------------------------------- #
 
 from .helpers import (
@@ -21,8 +21,8 @@ from .helpers import (
     should_use_colors,
     g_config,
 )
+from .extraction import extract_linear_structure
 from .registry import register_summary
-from .strategies import LinearTraversalStrategy
 
 
 @register_summary(r"^(Custom|My)?(Linked)?List<.*>$")
@@ -41,20 +41,17 @@ def linear_container_summary_provider(valobj, internal_dict):
     Returns:
         A formatted one-line summary string.
     """
-    # Use the appropriate strategy to traverse the data structure.
-    strategy = LinearTraversalStrategy()
     use_colors = should_use_colors()
+    extraction = extract_linear_structure(valobj, max_items=g_config.summary_max_items)
+    diagnostics_suffix = (
+        extraction.diagnostics.compact_summary() if g_config.diagnostics_enabled else ""
+    )
 
-    # Find the head pointer of the container.
-    head_ptr = get_child_member_by_names(valobj, ["head", "m_head", "_head", "top"])
-    if not head_ptr:
-        return "Error: Could not find head pointer member."
+    if extraction.error_message:
+        return f"{extraction.error_message}{diagnostics_suffix}"
 
-    if get_raw_pointer(head_ptr) == 0:
-        return "size = 0, []"
-
-    # The strategy returns the list of values and metadata about the traversal.
-    values, metadata = strategy.traverse(head_ptr, g_config.summary_max_items)
+    if extraction.is_empty:
+        return f"size = 0, []{diagnostics_suffix}"
 
     # --- Format the output string ---
     C_GREEN = Colors.GREEN if use_colors else ""
@@ -63,11 +60,8 @@ def linear_container_summary_provider(valobj, internal_dict):
     C_BOLD_CYAN = Colors.BOLD_CYAN if use_colors else ""
     C_RED = Colors.RED if use_colors else ""
 
-    # Format the size information.
-    size_member = get_child_member_by_names(
-        valobj, ["count", "size", "m_size", "_size"]
-    )
-    size_str = f"size = {size_member.GetValueAsUnsigned()}" if size_member else ""
+    values = [node.value for node in extraction.nodes]
+    size_str = f"size = {extraction.size}" if extraction.size is not None else ""
 
     # Colorize values. Red for errors, yellow for data.
     colored_values = []
@@ -80,13 +74,20 @@ def linear_container_summary_provider(valobj, internal_dict):
     # Choose the appropriate separator based on linked list type.
     separator = (
         f" {C_BOLD_CYAN}<->{C_RESET} "
-        if metadata.get("doubly_linked", False)
+        if extraction.is_doubly_linked
         else f" {C_BOLD_CYAN}->{C_RESET} "
     )
 
     summary_str = separator.join(colored_values)
 
-    if metadata.get("truncated", False):
+    if extraction.cycle_detected:
+        cycle_label = f"{C_RED}[CYCLE DETECTED]{C_RESET}"
+        if summary_str:
+            summary_str = f"{summary_str}{separator}{cycle_label}"
+        else:
+            summary_str = cycle_label
+
+    if extraction.truncated:
         summary_str += f" {separator.strip()} ..."
 
     return f"{C_GREEN}{size_str}{C_RESET}, [{summary_str}]"

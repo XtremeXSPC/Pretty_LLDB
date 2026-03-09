@@ -28,14 +28,9 @@ class Colors:
     RED = "\x1b[31m"
 
 
-# --------------- Debug flag to control print statements --------------- #
-
-DEBUG_ENABLED = False  # Set to True to see detailed debug output in the LLDB console
-
-
 def debug_print(message):
     """Prints a message only if debugging is enabled."""
-    if DEBUG_ENABLED:
+    if getattr(g_config, "debug_enabled", False):
         print(f"[Formatter Debug] {message}")
 
 
