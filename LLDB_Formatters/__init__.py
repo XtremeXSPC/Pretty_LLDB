@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: __init__.py
 #
 # DESCRIPTION:
@@ -14,7 +14,7 @@
 #   - Creating and enabling the 'CustomFormatters' category.
 #   - Dynamically registering all data formatters from the registry.
 #   - Registering all custom LLDB commands.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 try:
     import lldb  # type: ignore
@@ -23,17 +23,11 @@ except ImportError:
 
 # Import all modules that contain registered formatters or commands.
 # This ensures that the decorators are run and the registry is populated.
-from . import config
-from . import linear
-from . import tree
-from . import graph
-from . import web_visualizer
-from . import diagnostics
-from . import registry
+from . import config, diagnostics, graph, linear, registry, tree, web_visualizer
 from .helpers import Colors
 
 
-# ---------------------------- Help Command ---------------------------- #
+# ---------------------------- Help Command ----------------------------- #
 def formatter_help_command(debugger, command, result, internal_dict):
     """
     Implements the 'formatter_help' command.
@@ -72,7 +66,7 @@ def formatter_help_command(debugger, command, result, internal_dict):
 
   webtree [{C_ARG}<variable>{C_RST}]
     - Opens an interactive tree visualization in your web browser.
-    
+
   webgraph [{C_ARG}<variable>{C_RST}] (alias: `webg`)
     - Opens an interactive graph visualization in your web browser.
 
@@ -83,7 +77,7 @@ def formatter_help_command(debugger, command, result, internal_dict):
     result.AppendMessage(help_message)
 
 
-# --------------------- LLDB Module Initialization --------------------- #
+# --------------------- LLDB Module Initialization ---------------------- #
 def __lldb_init_module(debugger, internal_dict):
     """
     This is the main entry point that LLDB calls. It handles the dynamic
@@ -114,7 +108,9 @@ def __lldb_init_module(debugger, internal_dict):
                 lldb.SBTypeNameSpecifier(regex, True),
                 lldb.SBTypeSummary.CreateWithFunctionName(function_path),
             )
-            print(f"  - Registered summary: {function_path} for '{Colors.YELLOW}{regex}{Colors.RESET}'")
+            print(
+                f"  - Registered summary: {function_path} for '{Colors.YELLOW}{regex}{Colors.RESET}'"
+            )
 
         elif item["type"] == "synthetic":
             class_path = item["class_path"]
@@ -123,7 +119,9 @@ def __lldb_init_module(debugger, internal_dict):
                 lldb.SBTypeNameSpecifier(regex, True),
                 lldb.SBTypeSynthetic.CreateWithClassName(class_path),
             )
-            print(f"  - Registered synthetic: {class_path} for '{Colors.YELLOW}{regex}{Colors.RESET}'")
+            print(
+                f"  - Registered synthetic: {class_path} for '{Colors.YELLOW}{regex}{Colors.RESET}'"
+            )
 
     # ----- 3. Register Custom LLDB Commands ----- #
     command_map = {

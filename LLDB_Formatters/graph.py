@@ -19,10 +19,14 @@ from .extraction import extract_graph_structure
 from .helpers import (
     Colors,
     g_config,
-    get_child_member_by_names,
     get_value_summary,
 )
 from .registry import register_summary, register_synthetic
+from .schema_adapters import (
+    get_resolved_child,
+    resolve_graph_container_schema,
+    resolve_graph_node_schema,
+)
 
 # -------------- Formatter for Graphs (Synthetic Children) -------------- #
 
@@ -43,9 +47,7 @@ class GraphProvider:
     def update(self):
         """Finds the container of nodes within the graph object."""
         if not self.nodes_container:
-            self.nodes_container = get_child_member_by_names(
-                self.valobj, ["nodes", "m_nodes", "adj", "adjacency_list"]
-            )
+            self.nodes_container = resolve_graph_container_schema(self.valobj).nodes_container
 
     def num_children(self):
         """Returns the number of nodes to display as children."""
@@ -66,8 +68,9 @@ class GraphProvider:
         Returns a concise one-line text summary for the entire graph object.
         This summary is typically displayed next to the variable name.
         """
-        num_nodes_member = get_child_member_by_names(self.valobj, ["num_nodes", "V", "node_count"])
-        num_edges_member = get_child_member_by_names(self.valobj, ["num_edges", "E", "edge_count"])
+        container_schema = resolve_graph_container_schema(self.valobj)
+        num_nodes_member = container_schema.node_count_member
+        num_edges_member = container_schema.edge_count_member
 
         # Summaries in GUI panels should be colorless.
         summary = "Graph"
@@ -90,8 +93,9 @@ def graph_node_summary_provider(valobj, internal_dict):
     Provides a summary for a single Graph Node, showing its value and
     a list of its immediate neighbors.
     """
-    node_value = get_child_member_by_names(valobj, ["value", "val", "data", "key"])
-    neighbors = get_child_member_by_names(valobj, ["neighbors", "adj", "edges"])
+    schema = resolve_graph_node_schema(valobj)
+    node_value = get_resolved_child(valobj, schema.value_field)
+    neighbors = get_resolved_child(valobj, schema.neighbors_field)
 
     val_str = get_value_summary(node_value)
     summary = f"{Colors.YELLOW}{val_str}{Colors.RESET}"
@@ -108,9 +112,8 @@ def graph_node_summary_provider(valobj, internal_dict):
                 neighbor_node = neighbor_node.Dereference()
 
             if neighbor_node and neighbor_node.IsValid():
-                neighbor_val = get_child_member_by_names(
-                    neighbor_node, ["value", "val", "data", "key"]
-                )
+                neighbor_schema = resolve_graph_node_schema(neighbor_node)
+                neighbor_val = get_resolved_child(neighbor_node, neighbor_schema.value_field)
                 neighbor_summary = get_value_summary(neighbor_val)
                 if neighbor_summary:
                     neighbor_summaries.append(neighbor_summary)
@@ -150,9 +153,7 @@ def export_graph_command(debugger, command, result, internal_dict):
         result.SetError(f"Could not find a variable named '{var_name}'.")
         return
 
-    nodes_container = get_child_member_by_names(
-        graph_val, ["nodes", "m_nodes", "adj", "adjacency_list"]
-    )
+    nodes_container = resolve_graph_container_schema(graph_val).nodes_container
     if not nodes_container or not nodes_container.IsValid():
         result.AppendMessage("Graph is empty or nodes container not found.")
         return

@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: config.py
 #
 # DESCRIPTION:
@@ -9,7 +9,7 @@
 # It contains the implementation for the 'formatter_config' command,
 # which provides a runtime interface to inspect and modify these settings
 # directly from the LLDB console.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 
 class FormatterConfig:

@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: registry.py
 #
 # DESCRIPTION:
@@ -10,7 +10,7 @@
 # This approach decouples the formatters from the main '__init__.py'
 # file. To add a new formatter, one only needs to define it in its
 # module and decorate it, without modifying the initialization script.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 # This global list stores registration information for all formatters.
 # The '__lldb_init_module' function will iterate over this list to

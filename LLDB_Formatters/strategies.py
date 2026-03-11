@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: strategies.py
 #
 # DESCRIPTION:
@@ -10,7 +10,7 @@
 # decouple it from the summary providers. This allows for greater
 # flexibility, such as changing the traversal order of a tree at
 # runtime or easily adding new traversal methods.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
@@ -24,16 +24,19 @@ except ImportError:
     pass
 
 from .helpers import (
-    _get_node_children,
     _safe_get_node_from_pointer,
-    get_child_member_by_names,
     get_raw_pointer,
     get_value_summary,
-    type_has_field,
+)
+from .schema_adapters import (
+    get_resolved_child,
+    get_tree_children,
+    resolve_linear_node_schema,
+    resolve_tree_node_schema,
 )
 
 
-# ------------------- Traversal Strategy Base Class -------------------- #
+# -------------------- Traversal Strategy Base Class -------------------- #
 class TraversalStrategy(ABC):
     """
     Abstract base class for all traversal strategies. It defines a common
@@ -65,7 +68,7 @@ class TraversalStrategy(ABC):
         return dot_lines, metadata
 
 
-# ------------------ Concrete Traversal Strategies --------------------- #
+# -------------------- Concrete Traversal Strategies -------------------- #
 class LinearTraversalStrategy(TraversalStrategy):
     """A strategy for traversing linear, pointer-linked structures like lists."""
 
@@ -76,26 +79,14 @@ class LinearTraversalStrategy(TraversalStrategy):
             return [], {}
 
         # Introspect the first node to find member names dynamically.
-        node_obj = root_ptr.Dereference()
+        node_obj = _safe_get_node_from_pointer(root_ptr)
         if not node_obj or not node_obj.IsValid():
             return [], {}
 
-        node_type = node_obj.GetType()
-        next_ptr_name, value_name = None, None
-        is_doubly_linked = False
-
-        for name in ["next", "m_next", "_next", "pNext"]:
-            if type_has_field(node_type, name):
-                next_ptr_name = name
-                break
-        for name in ["value", "val", "data", "m_data", "key"]:
-            if type_has_field(node_type, name):
-                value_name = name
-                break
-        for name in ["prev", "m_prev", "_prev", "pPrev"]:
-            if type_has_field(node_type, name):
-                is_doubly_linked = True
-                break
+        schema = resolve_linear_node_schema(node_obj)
+        next_ptr_name = schema.next_field
+        value_name = schema.value_field
+        is_doubly_linked = schema.prev_field is not None
 
         if not next_ptr_name or not value_name:
             return ["Error: Could not determine node structure (val/next)"], {}
@@ -120,10 +111,10 @@ class LinearTraversalStrategy(TraversalStrategy):
             if not node_struct or not node_struct.IsValid():
                 break
 
-            value_child = get_child_member_by_names(node_struct, [value_name])
+            value_child = get_resolved_child(node_struct, value_name)
             values.append(get_value_summary(value_child))
 
-            current_ptr = get_child_member_by_names(node_struct, [next_ptr_name])
+            current_ptr = get_resolved_child(node_struct, next_ptr_name)
 
         metadata: Dict[str, Any] = {
             "truncated": truncated,
@@ -132,7 +123,7 @@ class LinearTraversalStrategy(TraversalStrategy):
         return values, metadata
 
 
-# ----------------- Tree Traversal Strategy Base Class ----------------- #
+# ----------------- Tree Traversal Strategy Base Class ------------------ #
 class TreeTraversalStrategy(TraversalStrategy):
     """
     An intermediate base class for tree traversal strategies.
@@ -189,7 +180,8 @@ class TreeTraversalStrategy(TraversalStrategy):
         if not node_struct or not node_struct.IsValid():
             return
 
-        value = get_child_member_by_names(node_struct, ["value", "val", "data", "key"])
+        schema = resolve_tree_node_schema(node_struct)
+        value = get_resolved_child(node_struct, schema.value_field)
         val_summary = get_value_summary(value).replace('"', '"')
 
         label = val_summary
@@ -201,7 +193,7 @@ class TreeTraversalStrategy(TraversalStrategy):
 
         dot_lines.append(f"  Node_{node_addr} [label={label}];")
 
-        children = _get_node_children(node_struct)
+        children = get_tree_children(node_struct, schema)
         for child_ptr in children:
             child_addr = get_raw_pointer(child_ptr)
             if child_addr != 0:
@@ -209,7 +201,7 @@ class TreeTraversalStrategy(TraversalStrategy):
                 self._build_dot_recursive(child_ptr, dot_lines, visited_addrs, traversal_map)
 
 
-# ----------------- Concrete Tree Traversal Strategies ----------------- #
+# ----------------- Concrete Tree Traversal Strategies ------------------ #
 class PreOrderTreeStrategy(TreeTraversalStrategy):
     """A strategy for traversing trees in Pre-Order (Root, Left, Right)."""
 
@@ -234,12 +226,13 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
                 return
 
             # 1. Visit Root
-            value = get_child_member_by_names(node, ["value", "val", "data", "key"])
+            schema = resolve_tree_node_schema(node)
+            value = get_resolved_child(node, schema.value_field)
             values.append(get_value_summary(value))
 
             # 2. Recurse on children
             if len(values) < max_items:
-                children = _get_node_children(node)
+                children = get_tree_children(node, schema)
                 for child in children:
                     _recursive_traverse(child)
 
@@ -267,7 +260,7 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
             # 2. Recurse on children
             node = _safe_get_node_from_pointer(node_ptr)
             if node and node.IsValid():
-                children = _get_node_children(node)
+                children = get_tree_children(node, resolve_tree_node_schema(node))
                 for child in children:
                     _recursive_traverse_addr(child)
 
@@ -302,15 +295,11 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
             if not node or not node.IsValid():
                 return
 
-            value = get_child_member_by_names(node, ["value", "val", "data", "key"])
-
-            # Intelligently distinguish between binary and n-ary trees.
-            left = get_child_member_by_names(node, ["left", "m_left", "_left"])
-            right = get_child_member_by_names(node, ["right", "m_right", "_right"])
-
-            # If the node has 'left' or 'right' members, treat it as a binary tree
-            # to enforce the strict Left -> Root -> Right order.
-            is_binary = (left and left.IsValid()) or (right and right.IsValid())
+            schema = resolve_tree_node_schema(node)
+            value = get_resolved_child(node, schema.value_field)
+            left = get_resolved_child(node, schema.left_field)
+            right = get_resolved_child(node, schema.right_field)
+            is_binary = schema.child_mode == "binary"
 
             if is_binary:
                 # 1. Recurse on Left Subtree
@@ -332,7 +321,7 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
             else:
                 # Fallback to the n-ary tree generalization:
                 # (First Child, Root, Other Children)
-                children = _get_node_children(node)
+                children = get_tree_children(node, schema)
 
                 # 1. Recurse on first child's subtree
                 if children:
@@ -373,9 +362,10 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
             if not node or not node.IsValid():
                 return
 
-            left = get_child_member_by_names(node, ["left", "m_left", "_left"])
-            right = get_child_member_by_names(node, ["right", "m_right", "_right"])
-            is_binary = (left and left.IsValid()) or (right and right.IsValid())
+            schema = resolve_tree_node_schema(node)
+            left = get_resolved_child(node, schema.left_field)
+            right = get_resolved_child(node, schema.right_field)
+            is_binary = schema.child_mode == "binary"
 
             if is_binary:
                 if left and get_raw_pointer(left) != 0:
@@ -384,7 +374,7 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
                 if right and get_raw_pointer(right) != 0:
                     _recursive_traverse_addr(right)
             else:
-                children = _get_node_children(node)
+                children = get_tree_children(node, schema)
                 if children:
                     _recursive_traverse_addr(children[0])
                 addresses.append(node_addr)
@@ -421,7 +411,8 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
                 return
 
             # 1. Recurse on all children
-            children = _get_node_children(node)
+            schema = resolve_tree_node_schema(node)
+            children = get_tree_children(node, schema)
             for child in children:
                 _recursive_traverse(child)
 
@@ -429,7 +420,7 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
                 return
 
             # 2. Visit Root
-            value = get_child_member_by_names(node, ["value", "val", "data", "key"])
+            value = get_resolved_child(node, schema.value_field)
             values.append(get_value_summary(value))
 
         _recursive_traverse(root_ptr)
@@ -452,7 +443,7 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
 
             node = _safe_get_node_from_pointer(node_ptr)
             if node and node.IsValid():
-                children = _get_node_children(node)
+                children = get_tree_children(node, resolve_tree_node_schema(node))
                 for child in children:
                     _recursive_traverse_addr(child)
 

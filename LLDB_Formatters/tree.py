@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: tree.py
 #
 # DESCRIPTION:
@@ -14,29 +14,33 @@
 #   - A summary provider that dynamically chooses a traversal strategy.
 #   - A suite of 'pptree' commands for console visualization.
 #   - An 'export_tree' command to generate Graphviz .dot files.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 import shlex
 
 from .extraction import extract_tree_structure
 from .helpers import (
     Colors,
-    _get_node_children,
     _safe_get_node_from_pointer,
     g_config,
-    get_child_member_by_names,
     get_raw_pointer,
     get_value_summary,
     should_use_colors,
 )
 from .registry import register_summary
+from .schema_adapters import (
+    get_resolved_child,
+    get_tree_children,
+    resolve_tree_container_schema,
+    resolve_tree_node_schema,
+)
 from .strategies import (
     InOrderTreeStrategy,
     PostOrderTreeStrategy,
     PreOrderTreeStrategy,
 )
 
-# ------------------ Summary Provider for Tree Root ------------------- #
+# ------------------- Summary Provider for Tree Root ------------------- #
 
 
 @register_summary(r"^(Custom|My)?(Binary)?Tree<.*>$")
@@ -64,7 +68,8 @@ def tree_summary_provider(valobj, internal_dict):
             return f"Tree is empty{diagnostics_suffix}"
 
     # Get Tree Root
-    root_node_ptr = get_child_member_by_names(valobj, ["root", "m_root", "_root"])
+    container_schema = resolve_tree_container_schema(valobj)
+    root_node_ptr = container_schema.root_ptr
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
         return f"Tree is empty{diagnostics_suffix}"
 
@@ -94,12 +99,11 @@ def tree_summary_provider(valobj, internal_dict):
     if metadata.get("truncated", False):
         summary_str += " ..."
 
-    size_member = get_child_member_by_names(valobj, ["size", "m_size", "count"])
     size_str = ""
     if extraction and extraction.size is not None:
         size_str = f"{C_GREEN}size = {extraction.size}{C_RESET}, "
-    elif size_member:
-        size_str = f"{C_GREEN}size = {size_member.GetValueAsUnsigned()}{C_RESET}, "
+    elif container_schema.size_member:
+        size_str = f"{C_GREEN}size = {container_schema.size_member.GetValueAsUnsigned()}{C_RESET}, "
 
     return f"{size_str}[{summary_str}] ({strategy_name}){diagnostics_suffix}"
 
@@ -127,20 +131,21 @@ def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=N
     if not node or not node.IsValid():
         return
 
-    value = get_child_member_by_names(node, ["value", "val", "data", "key"])
+    schema = resolve_tree_node_schema(node)
+    value = get_resolved_child(node, schema.value_field)
     value_summary = get_value_summary(value)
 
     result.AppendMessage(
         f"{prefix}{'└── ' if is_last else '├── '}{Colors.YELLOW}{value_summary}{Colors.RESET}"
     )
 
-    children = _get_node_children(node)
+    children = get_tree_children(node, schema)
     for i, child in enumerate(children):
         new_prefix = f"{prefix}{'    ' if is_last else '│   '}"
         _recursive_preorder_print(child, new_prefix, i == len(children) - 1, result, visited_addrs)
 
 
-# ------------ Central dispatcher for all 'pptree' commands ------------ #
+# ------------ Central dispatcher for all 'pptree' commands ------------- #
 
 
 def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
@@ -163,7 +168,7 @@ def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
         result.SetError(f"Could not find variable '{args[0]}'.")
         return
 
-    root_node_ptr = get_child_member_by_names(tree_val, ["root", "m_root", "_root"])
+    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
         result.AppendMessage("Tree is empty.")
         return
@@ -215,7 +220,7 @@ def pptree_postorder_command(debugger, command, result, internal_dict):
     _pptree_command_dispatcher(debugger, command, result, internal_dict, "postorder")
 
 
-# --------- LLDB Command to Export Tree as Graphviz .dot File ---------- #
+# ---------- LLDB Command to Export Tree as Graphviz .dot File ---------- #
 
 
 def export_tree_command(debugger, command, result, internal_dict):
@@ -242,7 +247,7 @@ def export_tree_command(debugger, command, result, internal_dict):
         result.SetError(f"Could not find variable '{var_name}'.")
         return
 
-    root_node_ptr = get_child_member_by_names(tree_val, ["root", "m_root", "_root"])
+    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
         result.AppendMessage("Tree is empty.")
         return

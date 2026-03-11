@@ -54,6 +54,38 @@ class TestLLDBIntegration(unittest.TestCase):
         self.assertIn("my_tree = size = 3", output)
         self.assertIn("[2 -> 1 -> 3] (preorder)", output)
 
+    def test_string_payload_list_summary_uses_real_lldb_values(self):
+        output = self._run_commands(["frame variable my_string_list"])
+
+        self.assertIn("my_string_list = size = 3", output)
+        self.assertIn("[alpha -> beta -> gamma]", output)
+
+    def test_optional_payload_list_summary_uses_real_lldb_values(self):
+        output = self._run_commands(["frame variable my_optional_list"])
+
+        self.assertIn("my_optional_list = size = 3", output)
+        self.assertIn("[10 -> nullopt -> 30]", output)
+
+    def test_pair_payload_tree_summary_uses_real_lldb_values(self):
+        output = self._run_commands(["frame variable my_pair_tree"])
+
+        self.assertIn("my_pair_tree = size = 3", output)
+        self.assertIn("(2, 20)", output)
+        self.assertIn("(1, 10)", output)
+        self.assertIn("(3, 30)", output)
+
+    def test_smart_list_summary_uses_real_lldb_values(self):
+        output = self._run_commands(["frame variable my_smart_list"])
+
+        self.assertIn("my_smart_list = size = 3", output)
+        self.assertIn("[10 -> 20 -> 30]", output)
+
+    def test_smart_tree_summary_uses_real_lldb_values(self):
+        output = self._run_commands(["frame variable my_smart_tree"])
+
+        self.assertIn("my_smart_tree = size = 3", output)
+        self.assertIn("[2 -> 1 -> 3] (preorder)", output)
+
     def test_formatter_config_can_enable_diagnostics(self):
         output = self._run_commands(
             [

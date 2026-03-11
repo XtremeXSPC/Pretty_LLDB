@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: web_visualizer.py
 #
 # DESCRIPTION:
@@ -22,7 +22,7 @@
 # The strategies are designed to produce linear text summaries, while the
 # web visualizer needs the full structural information of the data
 # (nodes, edges, addresses) to render it graphically.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 import json
 import os
@@ -37,10 +37,10 @@ from .extraction import (
 )
 from .helpers import debug_print
 
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # SECTION 1: PRIVATE HELPER FUNCTIONS
 # These functions are for internal use within this module.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 
 def _load_static_file(file_path):
@@ -142,10 +142,10 @@ def _build_visjs_data_for_graph(valobj):
     return {"nodes_data": nodes, "edges_data": edges}
 
 
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # SECTION 2: PUBLIC REUSABLE HTML GENERATORS
 # These functions orchestrate the creation of the final HTML content.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 
 def _generate_html(template_name, template_data):
@@ -278,10 +278,10 @@ def generate_graph_visualization_html(valobj):
     return _generate_html("graph_visualizer.html", template_data)
 
 
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # SECTION 3: CUSTOM LLDB COMMANDS
 # These functions are registered in __init__.py and are callable from LLDB.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 
 def _display_html_content(html_content, var_name, result):

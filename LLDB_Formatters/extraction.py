@@ -2,32 +2,23 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from .helpers import (
-    _get_node_children,
     _safe_get_node_from_pointer,
     debug_print,
-    get_child_member_by_names,
     get_nonsynthetic_value,
     get_raw_pointer,
     get_value_summary,
     type_has_field,
 )
-
-LINEAR_HEAD_FIELDS = ["head", "m_head", "_head", "top"]
-LINEAR_SIZE_FIELDS = ["count", "size", "m_size", "_size"]
-LINEAR_NEXT_FIELDS = ["next", "m_next", "_next", "pNext"]
-LINEAR_PREV_FIELDS = ["prev", "m_prev", "_prev", "pPrev"]
-VALUE_FIELDS = ["value", "val", "data", "m_data", "key"]
-
-TREE_ROOT_FIELDS = ["root", "m_root", "_root"]
-TREE_SIZE_FIELDS = ["size", "m_size", "count"]
-TREE_CHILDREN_FIELDS = ["children", "m_children"]
-TREE_LEFT_FIELDS = ["left", "m_left", "_left"]
-TREE_RIGHT_FIELDS = ["right", "m_right", "_right"]
-
-GRAPH_NODE_CONTAINER_FIELDS = ["nodes", "m_nodes", "adj", "adjacency_list"]
-GRAPH_NEIGHBOR_FIELDS = ["neighbors", "adj", "edges"]
-GRAPH_NODE_COUNT_FIELDS = ["num_nodes", "V", "node_count"]
-GRAPH_EDGE_COUNT_FIELDS = ["num_edges", "E", "edge_count"]
+from .schema_adapters import (
+    get_resolved_child,
+    get_tree_children,
+    resolve_graph_container_schema,
+    resolve_graph_node_schema,
+    resolve_linear_container_schema,
+    resolve_linear_node_schema,
+    resolve_tree_container_schema,
+    resolve_tree_node_schema,
+)
 
 
 @dataclass
@@ -228,11 +219,11 @@ def _safe_num_children(value) -> int:
 
 
 def detect_structure_kind(valobj) -> Optional[str]:
-    if get_child_member_by_names(valobj, LINEAR_HEAD_FIELDS):
+    if resolve_linear_container_schema(valobj).head_field:
         return "linear"
-    if get_child_member_by_names(valobj, TREE_ROOT_FIELDS):
+    if resolve_tree_container_schema(valobj).root_field:
         return "tree"
-    if get_child_member_by_names(valobj, GRAPH_NODE_CONTAINER_FIELDS):
+    if resolve_graph_container_schema(valobj).nodes_field:
         return "graph"
     return None
 
@@ -250,45 +241,37 @@ def extract_supported_structure(valobj, max_items: Optional[int] = None):
 
 def extract_linear_structure(valobj, max_items: Optional[int] = None) -> ExtractedLinearStructure:
     diagnostics = ExtractionDiagnostics("linear")
-    size_field, size_member = _resolve_child_field(
-        valobj, "container_size", LINEAR_SIZE_FIELDS, diagnostics
-    )
-    head_field, head_ptr = _resolve_child_field(
-        valobj, "container_head", LINEAR_HEAD_FIELDS, diagnostics
-    )
+    container_schema = resolve_linear_container_schema(valobj, diagnostics)
 
     extraction = ExtractedLinearStructure(
-        diagnostics=diagnostics, head_field=head_field, size_field=size_field
+        diagnostics=diagnostics,
+        head_field=container_schema.head_field,
+        size_field=container_schema.size_field,
     )
-    if size_member:
-        extraction.size = size_member.GetValueAsUnsigned()
+    if container_schema.size_member:
+        extraction.size = container_schema.size_member.GetValueAsUnsigned()
 
-    if not head_ptr:
+    if not container_schema.head_ptr and not extraction.head_field:
         extraction.error_message = "Error: Could not find head pointer member."
         diagnostics.warn("missing_head", "Could not find a valid head/top member.")
         return extraction
 
-    if get_raw_pointer(head_ptr) == 0:
+    if not container_schema.head_ptr or get_raw_pointer(container_schema.head_ptr) == 0:
         extraction.is_empty = True
         if extraction.size is None:
             extraction.size = 0
         return extraction
 
-    first_node = _safe_get_node_from_pointer(head_ptr)
+    first_node = _safe_get_node_from_pointer(container_schema.head_ptr)
     if not first_node or not first_node.IsValid():
         extraction.error_message = "Error: Could not dereference head pointer."
         diagnostics.warn("invalid_head", "The resolved head pointer could not be dereferenced.")
         return extraction
 
-    node_type = first_node.GetType()
-    extraction.next_field = _resolve_type_field_name(
-        node_type, "node_next", LINEAR_NEXT_FIELDS, diagnostics
-    )
-    extraction.value_field = _resolve_type_field_name(
-        node_type, "node_value", VALUE_FIELDS, diagnostics
-    )
-    prev_field = _resolve_type_field_name(node_type, "node_prev", LINEAR_PREV_FIELDS, diagnostics)
-    extraction.is_doubly_linked = prev_field is not None
+    node_schema = resolve_linear_node_schema(first_node, diagnostics)
+    extraction.next_field = node_schema.next_field
+    extraction.value_field = node_schema.value_field
+    extraction.is_doubly_linked = node_schema.prev_field is not None
 
     if not extraction.next_field or not extraction.value_field:
         extraction.error_message = "Error: Could not determine node structure (val/next)"
@@ -299,7 +282,7 @@ def extract_linear_structure(valobj, max_items: Optional[int] = None) -> Extract
         return extraction
 
     visited_addrs = set()
-    current_ptr = head_ptr
+    current_ptr = container_schema.head_ptr
     traversal_limit = max_items if max_items is not None else 1000000
 
     while get_raw_pointer(current_ptr) != 0:
@@ -329,8 +312,8 @@ def extract_linear_structure(valobj, max_items: Optional[int] = None) -> Extract
             )
             break
 
-        value_child = node_struct.GetChildMemberWithName(extraction.value_field)
-        next_child = node_struct.GetChildMemberWithName(extraction.next_field)
+        value_child = get_resolved_child(node_struct, extraction.value_field)
+        next_child = get_resolved_child(node_struct, extraction.next_field)
         extraction.nodes.append(
             LinearNode(
                 address=node_addr,
@@ -355,25 +338,22 @@ def extract_linear_structure(valobj, max_items: Optional[int] = None) -> Extract
 
 def extract_tree_structure(valobj) -> ExtractedTreeStructure:
     diagnostics = ExtractionDiagnostics("tree")
-    size_field, size_member = _resolve_child_field(
-        valobj, "container_size", TREE_SIZE_FIELDS, diagnostics
-    )
-    root_field, root_ptr = _resolve_child_field(
-        valobj, "container_root", TREE_ROOT_FIELDS, diagnostics
-    )
+    container_schema = resolve_tree_container_schema(valobj, diagnostics)
 
     extraction = ExtractedTreeStructure(
-        diagnostics=diagnostics, root_field=root_field, size_field=size_field
+        diagnostics=diagnostics,
+        root_field=container_schema.root_field,
+        size_field=container_schema.size_field,
     )
-    if size_member:
-        extraction.size = size_member.GetValueAsUnsigned()
+    if container_schema.size_member:
+        extraction.size = container_schema.size_member.GetValueAsUnsigned()
 
-    if not root_ptr:
+    if not container_schema.root_ptr and not extraction.root_field:
         extraction.error_message = "Tree is empty or root member not found."
         diagnostics.warn("missing_root", "Could not find a valid root member.")
         return extraction
 
-    extraction.root_address = get_raw_pointer(root_ptr)
+    extraction.root_address = get_raw_pointer(container_schema.root_ptr)
     if extraction.root_address == 0:
         extraction.is_empty = True
         return extraction
@@ -401,29 +381,14 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
             )
             return
 
+        node_schema = resolve_tree_node_schema(node_struct, diagnostics)
         if extraction.value_field is None:
-            extraction.value_field = _resolve_existing_child_name(
-                node_struct, "node_value", VALUE_FIELDS, diagnostics
-            )
-
+            extraction.value_field = node_schema.value_field
         if extraction.child_mode is None:
-            children_field = _resolve_existing_child_name(
-                node_struct, "node_children", TREE_CHILDREN_FIELDS, diagnostics
-            )
-            if children_field:
-                extraction.child_mode = "nary"
-            else:
-                left_field = _resolve_existing_child_name(
-                    node_struct, "node_left", TREE_LEFT_FIELDS, diagnostics
-                )
-                right_field = _resolve_existing_child_name(
-                    node_struct, "node_right", TREE_RIGHT_FIELDS, diagnostics
-                )
-                if left_field or right_field:
-                    extraction.child_mode = "binary"
+            extraction.child_mode = node_schema.child_mode
 
-        value = get_child_member_by_names(node_struct, VALUE_FIELDS)
-        children_ptrs = _get_node_children(node_struct)
+        value = get_resolved_child(node_struct, node_schema.value_field)
+        children_ptrs = get_tree_children(node_struct, node_schema)
         child_addresses = []
         for child_ptr in children_ptrs:
             child_addr = get_raw_pointer(child_ptr)
@@ -442,7 +407,7 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
         for child_ptr in children_ptrs:
             _visit(child_ptr)
 
-    _visit(root_ptr)
+    _visit(container_schema.root_ptr)
 
     if extraction.size is None and extraction.nodes:
         extraction.size = len(extraction.nodes)
@@ -452,31 +417,30 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
 
 def extract_graph_structure(valobj) -> ExtractedGraphStructure:
     diagnostics = ExtractionDiagnostics("graph")
-    nodes_field, nodes_container = _resolve_child_field(
-        valobj, "container_nodes", GRAPH_NODE_CONTAINER_FIELDS, diagnostics
-    )
-    size_field, size_member = _resolve_child_field(
-        valobj, "container_node_count", GRAPH_NODE_COUNT_FIELDS, diagnostics
-    )
-    edge_count_field, edge_count_member = _resolve_child_field(
-        valobj, "container_edge_count", GRAPH_EDGE_COUNT_FIELDS, diagnostics
-    )
+    container_schema = resolve_graph_container_schema(valobj, diagnostics)
 
     extraction = ExtractedGraphStructure(
         diagnostics=diagnostics,
-        nodes_field=nodes_field,
-        size_field=size_field,
-        edge_count_field=edge_count_field,
+        nodes_field=container_schema.nodes_field,
+        size_field=container_schema.node_count_field,
+        edge_count_field=container_schema.edge_count_field,
     )
-    if size_member:
-        extraction.num_nodes = size_member.GetValueAsUnsigned()
-    if edge_count_member:
-        extraction.num_edges = edge_count_member.GetValueAsUnsigned()
+    if container_schema.node_count_member:
+        extraction.num_nodes = container_schema.node_count_member.GetValueAsUnsigned()
+    if container_schema.edge_count_member:
+        extraction.num_edges = container_schema.edge_count_member.GetValueAsUnsigned()
 
-    if not nodes_container or not nodes_container.IsValid():
+    if not container_schema.nodes_container and not extraction.nodes_field:
         extraction.error_message = "Graph is empty or nodes container not found."
         extraction.is_empty = True
         diagnostics.warn("missing_nodes", "Could not find a valid graph nodes container.")
+        return extraction
+
+    nodes_container = container_schema.nodes_container
+    if not nodes_container or not nodes_container.IsValid():
+        extraction.error_message = "Graph is empty or nodes container not found."
+        extraction.is_empty = True
+        diagnostics.warn("missing_nodes", "Could not resolve the graph nodes container value.")
         return extraction
 
     node_map: Dict[int, GraphNode] = {}
@@ -500,22 +464,19 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
             )
             continue
 
+        node_schema = resolve_graph_node_schema(node, diagnostics)
         if extraction.value_field is None:
-            extraction.value_field = _resolve_existing_child_name(
-                node, "node_value", VALUE_FIELDS, diagnostics
-            )
+            extraction.value_field = node_schema.value_field
         if extraction.neighbors_field is None:
-            extraction.neighbors_field = _resolve_existing_child_name(
-                node, "node_neighbors", GRAPH_NEIGHBOR_FIELDS, diagnostics
-            )
+            extraction.neighbors_field = node_schema.neighbors_field
 
         if node_addr not in node_map:
             node_map[node_addr] = GraphNode(
                 address=node_addr,
-                value=get_value_summary(get_child_member_by_names(node, VALUE_FIELDS)),
+                value=get_value_summary(get_resolved_child(node, node_schema.value_field)),
             )
 
-        neighbors = get_child_member_by_names(node, GRAPH_NEIGHBOR_FIELDS)
+        neighbors = get_resolved_child(node, node_schema.neighbors_field)
         if neighbors and neighbors.IsValid():
             for neighbor_index in range(_safe_num_children(neighbors)):
                 neighbor = neighbors.GetChildAtIndex(neighbor_index)

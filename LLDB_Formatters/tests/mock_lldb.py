@@ -18,13 +18,20 @@ class MockSBValue:
     """
 
     def __init__(
-        self, value=None, children=None, is_pointer=False, name="value", type_name="MockType"
+        self,
+        value=None,
+        children=None,
+        is_pointer=False,
+        name="value",
+        type_name="MockType",
+        pointee=None,
     ):
         self._value = value
         self._children = children if children else {}
-        self._is_pointer = is_pointer
+        self._is_pointer = is_pointer or pointee is not None
         self._name = name
         self._type_name = type_name
+        self._pointee = pointee
 
         # ----- Mock for the SBType object ----- #
         self._type_mock = Mock()
@@ -50,13 +57,22 @@ class MockSBValue:
         # Simulates getting the address of a raw pointer.
         if isinstance(self._value, int):
             return self._value
+        if self._pointee is not None:
+            return id(self._pointee)
         return id(self)
 
     def GetSummary(self):
         return str(self._value) if self._value is not None else ""
 
     def Dereference(self):
+        if self._pointee is not None:
+            return self._pointee
         return self
+
+    def GetValue(self):
+        if self._value is None:
+            return None
+        return str(self._value)
 
     def IsValid(self):
         return True
@@ -76,6 +92,18 @@ class MockSBValue:
 
     def GetTypeName(self):
         return self._type_name
+
+    def GetNumChildren(self):
+        return len(self._children)
+
+    def GetChildAtIndex(self, index):
+        try:
+            return list(self._children.values())[index]
+        except IndexError:
+            return None
+
+    def MightHaveChildren(self):
+        return bool(self._children)
 
 
 class MockSBValueContainer(MockSBValue):

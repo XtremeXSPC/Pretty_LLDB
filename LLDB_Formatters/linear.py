@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: linear.py
 #
 # DESCRIPTION:
@@ -11,7 +11,7 @@
 #      extraction layer.
 #   3. Formatting the extracted nodes into a final, user-facing
 #      summary string.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 from .extraction import extract_linear_structure
 from .helpers import (
@@ -53,7 +53,7 @@ def linear_container_summary_provider(valobj, internal_dict):
     if extraction.is_empty:
         return f"size = 0, []{diagnostics_suffix}"
 
-    # --- Format the output string ---
+    # ----- Format the output string ----- #
     C_GREEN = Colors.GREEN if use_colors else ""
     C_RESET = Colors.RESET if use_colors else ""
     C_YELLOW = Colors.YELLOW if use_colors else ""
@@ -92,33 +92,6 @@ def linear_container_summary_provider(valobj, internal_dict):
 
     return f"{C_GREEN}{size_str}{C_RESET}, [{summary_str}]{diagnostics_suffix}"
 
-# ------------------ Summary Provider for std::vector ------------------- #
-
-def _extract_vector_end_cap_pointer(end_cap_value):
-    if not end_cap_value or not end_cap_value.IsValid():
-        return None
-
-    if end_cap_value.GetType().IsPointerType():
-        return end_cap_value
-
-    for name in ["__value_", "__first_", "first", "__value", "__first"]:
-        child = end_cap_value.GetChildMemberWithName(name)
-        if child and child.IsValid():
-            if child.GetType().IsPointerType():
-                return child
-            nested = get_child_member_by_names(
-                child, ["__value_", "__first_", "first", "__value", "__first"]
-            )
-            if nested and nested.IsValid() and nested.GetType().IsPointerType():
-                return nested
-
-    for i in range(end_cap_value.GetNumChildren()):
-        child = end_cap_value.GetChildAtIndex(i)
-        if child and child.IsValid() and child.GetType().IsPointerType():
-            return child
-
-    return None
-
 
 @register_summary(r"^std::__1::vector<.*>$")
 @register_summary(r"^std::vector<.*>$")
@@ -136,7 +109,6 @@ def vector_summary_provider(valobj, internal_dict):
     begin_ptr = get_child_member_by_names(valobj, ["__begin_", "__begin"])
     end_ptr = get_child_member_by_names(valobj, ["__end_", "__end"])
     end_cap_raw = get_child_member_by_names(valobj, ["__end_cap_", "__end_cap"])
-    end_cap_ptr = _extract_vector_end_cap_pointer(end_cap_raw)
 
     if not begin_ptr or not end_ptr:
         return "Error: Could not locate vector storage pointers."
@@ -156,8 +128,8 @@ def vector_summary_provider(valobj, internal_dict):
         size = (end_addr - begin_addr) // element_size
 
     capacity = None
-    if end_cap_ptr:
-        end_cap_addr = get_raw_pointer(end_cap_ptr)
+    end_cap_addr = get_raw_pointer(end_cap_raw) if end_cap_raw else 0
+    if end_cap_addr:
         if end_cap_addr and element_size > 0 and end_cap_addr >= begin_addr:
             capacity = (end_cap_addr - begin_addr) // element_size
 
@@ -169,9 +141,7 @@ def vector_summary_provider(valobj, internal_dict):
         for i in range(show_count):
             element_addr = begin_addr + (i * element_size)
             try:
-                element_val = valobj.CreateValueFromAddress(
-                    f"[{i}]", element_addr, elem_type
-                )
+                element_val = valobj.CreateValueFromAddress(f"[{i}]", element_addr, elem_type)
             except Exception:
                 element_val = None
             values.append(get_value_summary(element_val))

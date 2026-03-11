@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 # FILE: helpers.py
 #
 # DESCRIPTION:
@@ -11,11 +11,17 @@
 #   - Access to the global configuration object 'g_config'.
 #   - ANSI color code definitions for colored console output.
 #   - A conditional debug printing utility.
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------- #
 
 import os
 
 from .config import g_config
+from .pointers import (
+    dereference_pointer_like,
+    get_nonsynthetic_value,
+    get_raw_pointer,
+    resolve_pointer_like,
+)
 
 
 # ----- ANSI Color Codes ----- #
@@ -35,7 +41,7 @@ def debug_print(message):
         print(f"[Formatter Debug] {message}")
 
 
-# -------------------------- Generic Helpers --------------------------- #
+# --------------------------- Generic Helpers --------------------------- #
 
 
 def should_use_colors():
@@ -58,24 +64,6 @@ def type_has_field(type_obj, field_name):
     return False
 
 
-def get_nonsynthetic_value(value):
-    """
-    Returns the non-synthetic backing value when LLDB exposes a synthetic
-    provider for the object. Falls back to the original value otherwise.
-    """
-    if not value or not value.IsValid():
-        return value
-
-    try:
-        nonsynthetic = value.GetNonSyntheticValue()
-        if nonsynthetic and nonsynthetic.IsValid():
-            return nonsynthetic
-    except Exception:
-        pass
-
-    return value
-
-
 def get_child_member_by_names(value, names):
     """
     Attempts to find and return the first valid child member from a list of
@@ -91,26 +79,216 @@ def get_child_member_by_names(value, names):
     return None
 
 
-def get_raw_pointer(value):
-    """
-    Extracts the raw memory address from an SBValue, correctly handling
-    raw pointers, smart pointers (unique_ptr, shared_ptr), and other objects.
-    """
+def _get_display_child_by_names(value, names):
     if not value or not value.IsValid():
+        return None
+
+    for name in names:
+        child = value.GetChildMemberWithName(name)
+        if child and child.IsValid():
+            return child
+
+    return get_child_member_by_names(value, names)
+
+
+def _normalize_summary_text(summary):
+    if summary is None:
+        return None
+
+    normalized = summary.strip()
+    if len(normalized) >= 2 and normalized[0] == normalized[-1] == '"':
+        return normalized[1:-1]
+    return normalized
+
+
+def _safe_type_name(value_child):
+    try:
+        return value_child.GetTypeName() or ""
+    except Exception:
+        return ""
+
+
+def _safe_value_text(value_child):
+    try:
+        return value_child.GetValue()
+    except Exception:
+        return None
+
+
+def _safe_num_children(value_child):
+    try:
+        return value_child.GetNumChildren()
+    except Exception:
         return 0
 
-    # If it's already a pointer type, get its value.
-    if value.GetType().IsPointerType():
-        return value.GetValueAsUnsigned()
 
-    # For smart pointers, find the internal raw pointer member.
-    # Common names are '_M_ptr' (libstdc++), '__ptr_' (libc++), 'pointer'.
-    ptr_member = get_child_member_by_names(value, ["_M_ptr", "__ptr_", "pointer"])
-    if ptr_member and ptr_member.IsValid():
-        return ptr_member.GetValueAsUnsigned()
+def _safe_child_name(value_child):
+    try:
+        return value_child.GetName()
+    except Exception:
+        return None
 
-    # As a fallback for other types, return the address of the object itself.
-    return value.GetAddress().GetFileAddress()
+
+def _safe_child_at_index(value_child, index):
+    try:
+        return value_child.GetChildAtIndex(index)
+    except Exception:
+        return None
+
+
+def _looks_like_std_type(type_name, token):
+    return token in type_name.lower()
+
+
+def _get_nested_child_by_paths(value_child, paths):
+    for path in paths:
+        current = value_child
+        for field_name in path:
+            current = _get_display_child_by_names(current, [field_name])
+            if not current:
+                break
+        if current and current.IsValid():
+            return current
+    return None
+
+
+def _find_descendant_child_by_names(value_child, names, max_depth=6, seen_ids=None):
+    if max_depth < 0 or not value_child or not value_child.IsValid():
+        return None
+
+    if seen_ids is None:
+        seen_ids = set()
+
+    value_id = id(value_child)
+    if value_id in seen_ids:
+        return None
+    seen_ids = seen_ids | {value_id}
+
+    direct = _get_display_child_by_names(value_child, names)
+    if direct:
+        return direct
+
+    for index in range(_safe_num_children(value_child)):
+        child = _safe_child_at_index(value_child, index)
+        if not child or not child.IsValid():
+            continue
+        found = _find_descendant_child_by_names(
+            child,
+            names,
+            max_depth=max_depth - 1,
+            seen_ids=seen_ids,
+        )
+        if found:
+            return found
+
+    return None
+
+
+def _parse_bool_like(child):
+    if not child or not child.IsValid():
+        return None
+
+    raw_text = _safe_value_text(child)
+    if raw_text is None or raw_text == "":
+        raw_text = child.GetSummary()
+    if raw_text is None or raw_text == "":
+        return None
+
+    normalized = _normalize_summary_text(str(raw_text)).lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def _render_optional_like(value_child):
+    engaged_child = _get_nested_child_by_paths(
+        value_child,
+        [
+            ("__engaged_",),
+            ("__has_value_",),
+            ("has_value",),
+            ("_M_engaged",),
+            ("_M_payload", "_M_engaged"),
+            ("_M_payload", "_M_payload", "_M_engaged"),
+        ],
+    )
+    if not engaged_child:
+        engaged_child = _find_descendant_child_by_names(
+            value_child,
+            ["__engaged_", "__has_value_", "has_value", "_M_engaged"],
+        )
+    engaged = _parse_bool_like(engaged_child)
+    if engaged is False:
+        return "nullopt"
+
+    value_member = _get_nested_child_by_paths(
+        value_child,
+        [
+            ("__val_",),
+            ("__value_",),
+            ("Value",),
+            ("_M_value",),
+            ("value",),
+            ("_M_payload", "_M_value"),
+            ("_M_payload", "__value_"),
+            ("_M_payload", "_M_payload", "_M_value"),
+        ],
+    )
+    if not value_member:
+        value_member = _find_descendant_child_by_names(
+            value_child,
+            ["__val_", "__value_", "Value", "_M_value", "value"],
+        )
+    if value_member and value_member.IsValid():
+        return get_value_summary(value_member)
+
+    return None
+
+
+def _render_pair_like(value_child):
+    first = _get_display_child_by_names(value_child, ["first"])
+    second = _get_display_child_by_names(value_child, ["second"])
+    if not first and not second:
+        return None
+
+    first_summary = get_value_summary(first) if first else "?"
+    second_summary = get_value_summary(second) if second else "?"
+    return f"({first_summary}, {second_summary})"
+
+
+def _render_tuple_like(value_child):
+    items = []
+    for index in range(_safe_num_children(value_child)):
+        child = value_child.GetChildAtIndex(index)
+        if not child or not child.IsValid():
+            continue
+        child_name = _safe_child_name(child)
+        if child_name and (child_name.startswith("[") or child_name.isdigit()):
+            items.append(get_value_summary(child))
+
+    if items:
+        return f"({', '.join(items)})"
+    return None
+
+
+def _render_string_view_like(value_child):
+    size_member = _get_display_child_by_names(
+        value_child,
+        ["__size_", "_M_len", "size", "_M_size"],
+    )
+    if not size_member:
+        return None
+
+    try:
+        size_value = size_member.GetValueAsUnsigned()
+    except Exception:
+        size_value = None
+
+    if size_value is None:
+        return None
+    return f"string_view(size={size_value})"
 
 
 def get_value_summary(value_child):
@@ -121,17 +299,43 @@ def get_value_summary(value_child):
     if not value_child or not value_child.IsValid():
         return f"{Colors.RED}[invalid]{Colors.RESET}"
 
+    type_name = _safe_type_name(value_child)
+
+    if _looks_like_std_type(type_name, "optional<"):
+        optional_summary = _render_optional_like(value_child)
+        if optional_summary is not None:
+            return optional_summary
+
+    if _looks_like_std_type(type_name, "pair<"):
+        pair_summary = _render_pair_like(value_child)
+        if pair_summary is not None:
+            return pair_summary
+
+    if _looks_like_std_type(type_name, "tuple<"):
+        tuple_summary = _render_tuple_like(value_child)
+        if tuple_summary is not None:
+            return tuple_summary
+
     # GetSummary() often provides a better representation (e.g., for strings)
-    # and we strip quotes for cleaner display inside our own formatting.
+    # and we normalize quotes for cleaner display inside our own formatting.
     summary = value_child.GetSummary()
     if summary:
-        return summary.strip('"')
+        return _normalize_summary_text(summary)
+
+    if _looks_like_std_type(type_name, "string_view"):
+        string_view_summary = _render_string_view_like(value_child)
+        if string_view_summary is not None:
+            return string_view_summary
 
     # Fallback to GetValue() if no summary is available.
-    return value_child.GetValue()
+    raw_value = _safe_value_text(value_child)
+    if raw_value not in (None, ""):
+        return raw_value
+
+    return f"{Colors.RED}[unavailable]{Colors.RESET}"
 
 
-# ---------------- Tree-specific Helpers (Centralized) ----------------- #
+# ----------------- Tree-specific Helpers (Centralized) ----------------- #
 
 
 def _safe_get_node_from_pointer(node_ptr):
@@ -142,15 +346,21 @@ def _safe_get_node_from_pointer(node_ptr):
     if not node_ptr or not node_ptr.IsValid():
         return None
 
-    # Try to handle it as a smart pointer first by looking for an internal pointer.
-    internal_ptr = get_child_member_by_names(node_ptr, ["_M_ptr", "__ptr_", "pointer"])
-    if internal_ptr and internal_ptr.IsValid():
-        debug_print("   - Smart pointer detected, dereferencing internal ptr.")
-        return internal_ptr.Dereference()
+    resolution = resolve_pointer_like(node_ptr)
+    if resolution.kind == "invalid" or resolution.is_null:
+        return None
 
-    # Fallback for raw pointers, which can be dereferenced directly.
-    debug_print("   - Assuming raw pointer, dereferencing directly.")
-    return node_ptr.Dereference()
+    if resolution.kind == "object_address_fallback":
+        debug_print("   - Using object-address fallback for non-pointer node storage.")
+    elif resolution.matched_path:
+        debug_print(
+            f"   - Pointer resolver matched {'/'.join(resolution.matched_path)} "
+            f"({resolution.kind})."
+        )
+    else:
+        debug_print(f"   - Pointer resolver matched {resolution.kind}.")
+
+    return dereference_pointer_like(node_ptr)
 
 
 def _get_node_children(node_struct):
