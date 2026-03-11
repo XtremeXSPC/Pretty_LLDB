@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
+from LLDB_Formatters.abi_layouts import resolve_vector_storage_layout
 from LLDB_Formatters.config import g_config
 from LLDB_Formatters.linear import (
     linear_container_summary_provider,
@@ -73,6 +74,49 @@ class TestLinearFormatters(unittest.TestCase):
             self.assertIn("capacity = 4", summary)
             self.assertIn("data = 0x1000", summary)
             self.assertIn("[10, 20, ...]", summary)
+        finally:
+            g_config.summary_max_items = original_summary_max_items
+
+    def test_vector_summary_supports_libstdcxx_storage_layout(self):
+        original_summary_max_items = g_config.summary_max_items
+        g_config.summary_max_items = 4
+        try:
+            elem_type = Mock()
+            elem_type.GetByteSize.return_value = 8
+
+            begin_ptr = MockSBValue(0x2000, is_pointer=True, name="_M_start")
+            begin_ptr.GetType().GetPointeeType.return_value = elem_type
+            end_ptr = MockSBValue(0x2018, is_pointer=True, name="_M_finish")
+            end_cap_ptr = MockSBValue(0x2020, is_pointer=True, name="_M_end_of_storage")
+
+            address_map = {
+                0x2000: MockSBValue(11, name="[0]"),
+                0x2008: MockSBValue(22, name="[1]"),
+                0x2010: MockSBValue(33, name="[2]"),
+            }
+            vector_value = MockVectorSBValue(
+                children={
+                    "_M_impl": MockSBValue(
+                        children={
+                            "_M_start": begin_ptr,
+                            "_M_finish": end_ptr,
+                            "_M_end_of_storage": end_cap_ptr,
+                        },
+                        name="_M_impl",
+                    )
+                },
+                address_map=address_map,
+            )
+
+            storage = resolve_vector_storage_layout(vector_value)
+            summary = vector_summary_provider(vector_value, {})
+
+            self.assertEqual(storage.abi_family, "libstdcxx")
+            self.assertIs(storage.begin_ptr, begin_ptr)
+            self.assertIn("size = 3", summary)
+            self.assertIn("capacity = 4", summary)
+            self.assertIn("data = 0x2000", summary)
+            self.assertIn("[11, 22, 33]", summary)
         finally:
             g_config.summary_max_items = original_summary_max_items
 

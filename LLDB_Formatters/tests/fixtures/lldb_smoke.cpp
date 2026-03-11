@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 template <typename T>
 struct MyListNode {
@@ -91,6 +92,9 @@ int main() {
       new MyListNode<std::optional<int>>{std::optional<int>{10}, optional_node2};
   MyList<std::optional<int>> my_optional_list{optional_node1, 3};
 
+  std::vector<int> my_vector{1, 2, 3, 4};
+  std::vector<std::string> my_string_vector{"red", "green", "blue"};
+
   auto smart_list_node3 = std::make_unique<MyLinkedListNode<int>>(
       MyLinkedListNode<int>{30, nullptr});
   auto smart_list_node2 = std::make_unique<MyLinkedListNode<int>>(
@@ -129,6 +133,7 @@ int main() {
 
   volatile auto keep_alive =
       my_list.size + my_string_list.size + my_optional_list.size +
+      my_vector.size() + my_string_vector.size() +
       my_smart_list.size + my_tree.size + my_pair_tree.size +
       my_smart_tree.size + my_graph.num_nodes + my_graph.num_edges;
   return static_cast<int>(keep_alive);

@@ -13,11 +13,11 @@
 #      summary string.
 # ----------------------------------------------------------------------- #
 
+from .abi_layouts import resolve_vector_storage_layout
 from .extraction import extract_linear_structure
 from .helpers import (
     Colors,
     g_config,
-    get_child_member_by_names,
     get_raw_pointer,
     get_value_summary,
     should_use_colors,
@@ -97,7 +97,7 @@ def linear_container_summary_provider(valobj, internal_dict):
 @register_summary(r"^std::vector<.*>$")
 def vector_summary_provider(valobj, internal_dict):
     """
-    Summary provider for libc++ std::vector.
+    Summary provider for std::vector across common libc++ and libstdc++ layouts.
     Displays size, capacity, data pointer, and a preview of elements.
     """
     use_colors = should_use_colors()
@@ -106,9 +106,10 @@ def vector_summary_provider(valobj, internal_dict):
     C_YELLOW = Colors.YELLOW if use_colors else ""
     C_RED = Colors.RED if use_colors else ""
 
-    begin_ptr = get_child_member_by_names(valobj, ["__begin_", "__begin"])
-    end_ptr = get_child_member_by_names(valobj, ["__end_", "__end"])
-    end_cap_raw = get_child_member_by_names(valobj, ["__end_cap_", "__end_cap"])
+    storage = resolve_vector_storage_layout(valobj)
+    begin_ptr = storage.begin_ptr
+    end_ptr = storage.end_ptr
+    end_cap_raw = storage.end_cap_ptr
 
     if not begin_ptr or not end_ptr:
         return "Error: Could not locate vector storage pointers."

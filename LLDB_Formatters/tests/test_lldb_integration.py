@@ -4,7 +4,9 @@ from pathlib import Path
 
 from LLDB_Formatters.tests.lldb_integration import (
     RUNTIME_ROOT,
+    available_compiler_variants,
     build_fixture,
+    classify_vector_abi_from_output,
     run_lldb_batch,
     strip_ansi,
 )
@@ -21,7 +23,10 @@ class TestLLDBIntegration(unittest.TestCase):
             raise unittest.SkipTest(str(error))
 
     def _run_commands(self, commands):
-        result = run_lldb_batch(self.binary_path, commands)
+        return self._run_commands_for_binary(self.binary_path, commands)
+
+    def _run_commands_for_binary(self, binary_path, commands):
+        result = run_lldb_batch(binary_path, commands)
         combined_output = strip_ansi(f"{result.stdout}\n{result.stderr}")
         if (
             result.returncode != 0
@@ -73,6 +78,60 @@ class TestLLDBIntegration(unittest.TestCase):
         self.assertIn("(2, 20)", output)
         self.assertIn("(1, 10)", output)
         self.assertIn("(3, 30)", output)
+
+    def test_vector_summary_uses_real_lldb_values(self):
+        output = self._run_commands(["frame variable my_vector"])
+
+        self.assertIn("my_vector = size = 4", output)
+        self.assertIn("[1, 2, 3, 4]", output)
+
+    def test_string_vector_summary_uses_real_lldb_values(self):
+        output = self._run_commands(["frame variable my_string_vector"])
+
+        self.assertIn("my_string_vector = size = 3", output)
+        self.assertIn("[red, green, blue]", output)
+
+    def test_available_vector_abi_variants_report_supported_layouts(self):
+        variants = available_compiler_variants()
+        if not variants:
+            raise unittest.SkipTest("No compiler variants available for ABI probing.")
+
+        exercised = 0
+        observed_abis = set()
+        for variant in variants:
+            try:
+                binary_path = build_fixture("lldb_smoke.cpp", compiler_variant=variant)
+            except RuntimeError:
+                continue
+
+            with self.subTest(variant=variant.name):
+                output = self._run_commands_for_binary(
+                    binary_path,
+                    ["frame variable my_vector", "frame variable --raw my_vector"],
+                )
+                self.assertIn("my_vector = size = 4", output)
+                self.assertIn("[1, 2, 3, 4]", output)
+
+                abi_family = classify_vector_abi_from_output(output)
+                self.assertIn(
+                    abi_family,
+                    {"libcxx", "libstdcxx"},
+                    msg=f"Could not classify std::vector ABI for variant '{variant.name}'.",
+                )
+                if variant.expected_abi:
+                    self.assertEqual(
+                        abi_family,
+                        variant.expected_abi,
+                        msg=f"Expected ABI '{variant.expected_abi}' for variant '{variant.name}'.",
+                    )
+
+                observed_abis.add(abi_family)
+                exercised += 1
+
+        if exercised == 0:
+            raise unittest.SkipTest("No ABI-specific compiler variants could be built.")
+
+        self.assertTrue(observed_abis)
 
     def test_smart_list_summary_uses_real_lldb_values(self):
         output = self._run_commands(["frame variable my_smart_list"])
