@@ -16,6 +16,7 @@
 from .extraction import extract_linear_structure
 from .helpers import (
     Colors,
+    g_config,
     get_child_member_by_names,
     get_raw_pointer,
     get_value_summary,
@@ -89,7 +90,7 @@ def linear_container_summary_provider(valobj, internal_dict):
     if extraction.truncated:
         summary_str += f" {separator.strip()} ..."
 
-    return f"{C_GREEN}{size_str}{C_RESET}, [{summary_str}]"
+    return f"{C_GREEN}{size_str}{C_RESET}, [{summary_str}]{diagnostics_suffix}"
 
 # ------------------ Summary Provider for std::vector ------------------- #
 
