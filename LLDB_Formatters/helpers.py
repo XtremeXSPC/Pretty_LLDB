@@ -35,6 +35,10 @@ class Colors:
     RED = "\x1b[31m"
 
 
+SUMMARY_CYCLE_MARKER = "[CYCLE]"
+SUMMARY_TRUNCATION_MARKER = "..."
+
+
 def debug_print(message):
     """Prints a message only if debugging is enabled."""
     if getattr(g_config, "debug_enabled", False):

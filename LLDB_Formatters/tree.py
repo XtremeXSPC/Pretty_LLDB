@@ -16,11 +16,17 @@
 #   - An 'export_tree' command to generate Graphviz .dot files.
 # ----------------------------------------------------------------------- #
 
-import shlex
-
+from .command_helpers import (
+    empty_structure_message,
+    find_variable,
+    resolve_command_arguments,
+    resolve_command_variable,
+)
 from .extraction import extract_tree_structure
 from .helpers import (
     Colors,
+    SUMMARY_CYCLE_MARKER,
+    SUMMARY_TRUNCATION_MARKER,
     _safe_get_node_from_pointer,
     g_config,
     get_raw_pointer,
@@ -97,7 +103,7 @@ def tree_summary_provider(valobj, internal_dict):
     summary_str = separator.join(colored_values)
 
     if metadata.get("truncated", False):
-        summary_str += " ..."
+        summary_str += f" {SUMMARY_TRUNCATION_MARKER}"
 
     size_str = ""
     if extraction and extraction.size is not None:
@@ -122,7 +128,7 @@ def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=N
     node_addr = get_raw_pointer(node_ptr)
     if node_addr in visited_addrs:
         result.AppendMessage(
-            f"{prefix}{'└── ' if is_last else '├── '}{Colors.RED}[CYCLE]{Colors.RESET}"
+            f"{prefix}{'└── ' if is_last else '├── '}{Colors.RED}{SUMMARY_CYCLE_MARKER}{Colors.RESET}"
         )
         return
     visited_addrs.add(node_addr)
@@ -153,24 +159,18 @@ def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
     A single function to handle the logic for all traversal commands.
     'order' can be 'preorder', 'inorder', or 'postorder'.
     """
-    args = shlex.split(command)
-    if not args:
-        result.SetError(f"Usage: pptree_{order} <variable_name>")
-        return
-
-    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    if not frame.IsValid():
-        result.SetError("Cannot execute command: invalid execution context.")
-        return
-
-    tree_val = frame.FindVariable(args[0])
-    if not tree_val or not tree_val.IsValid():
-        result.SetError(f"Could not find variable '{args[0]}'.")
+    _, _, tree_val = resolve_command_variable(
+        debugger,
+        command,
+        result,
+        f"pptree_{order}",
+    )
+    if not tree_val:
         return
 
     root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
-        result.AppendMessage("Tree is empty.")
+        result.AppendMessage(empty_structure_message("tree"))
         return
 
     result.AppendMessage(
@@ -228,28 +228,28 @@ def export_tree_command(debugger, command, result, internal_dict):
     Implements the 'export_tree' command. Traverses a tree and writes
     a Graphviz .dot file. Now uses a unified strategy-based approach.
     """
-    args = shlex.split(command)
-    if not args:
-        result.SetError("Usage: export_tree <variable> [file.dot] [order]")
+    args, frame = resolve_command_arguments(
+        debugger,
+        command,
+        result,
+        "export_tree",
+        "<variable> [file.dot] [order]",
+        min_args=1,
+    )
+    if not args or not frame:
         return
 
     var_name = args[0]
     output_filename = args[1] if len(args) > 1 else "tree.dot"
     traversal_order = args[2].lower() if len(args) > 2 else None
 
-    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    if not frame.IsValid():
-        result.SetError("Cannot execute: invalid execution context.")
-        return
-
-    tree_val = frame.FindVariable(var_name)
-    if not tree_val or not tree_val.IsValid():
-        result.SetError(f"Could not find variable '{var_name}'.")
+    tree_val = find_variable(frame, var_name, result)
+    if not tree_val:
         return
 
     root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
-        result.AppendMessage("Tree is empty.")
+        result.AppendMessage(empty_structure_message("tree"))
         return
 
     # Define available strategies.

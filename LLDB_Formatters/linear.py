@@ -17,6 +17,8 @@ from .abi_layouts import resolve_vector_storage_layout
 from .extraction import extract_linear_structure
 from .helpers import (
     Colors,
+    SUMMARY_CYCLE_MARKER,
+    SUMMARY_TRUNCATION_MARKER,
     g_config,
     get_raw_pointer,
     get_value_summary,
@@ -81,14 +83,14 @@ def linear_container_summary_provider(valobj, internal_dict):
     summary_str = separator.join(colored_values)
 
     if extraction.cycle_detected:
-        cycle_label = f"{C_RED}[CYCLE DETECTED]{C_RESET}"
+        cycle_label = f"{C_RED}{SUMMARY_CYCLE_MARKER}{C_RESET}"
         if summary_str:
             summary_str = f"{summary_str}{separator}{cycle_label}"
         else:
             summary_str = cycle_label
 
     if extraction.truncated:
-        summary_str += f" {separator.strip()} ..."
+        summary_str += f" {separator.strip()} {SUMMARY_TRUNCATION_MARKER}"
 
     return f"{C_GREEN}{size_str}{C_RESET}, [{summary_str}]{diagnostics_suffix}"
 
@@ -163,7 +165,11 @@ def vector_summary_provider(valobj, internal_dict):
         elements_str = f"{C_RED}[unavailable]{C_RESET}"
 
     if truncated:
-        elements_str = f"{elements_str}, ..." if elements_str else "..."
+        elements_str = (
+            f"{elements_str}, {SUMMARY_TRUNCATION_MARKER}"
+            if elements_str
+            else SUMMARY_TRUNCATION_MARKER
+        )
 
     size_str = f"size = {size}"
     capacity_str = f"capacity = {capacity}" if capacity is not None else "capacity = ?"

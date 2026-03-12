@@ -26,10 +26,10 @@
 
 import json
 import os
-import shlex
 import tempfile
 import webbrowser
 
+from .command_helpers import resolve_command_variable
 from .extraction import (
     extract_graph_structure,
     extract_linear_structure,
@@ -323,34 +323,14 @@ def _display_html_content(html_content, var_name, result):
         result.SetError(f"Failed to create or open the HTML file: {e}")
 
 
-def _get_variable_from_command(command, debugger, result):
-    """
-    A utility to parse the command arguments to get the variable name
-    and retrieve the corresponding SBValue from the debugger frame.
-    Handles common errors like missing arguments or invalid variables.
-    """
-    args = shlex.split(command)
-    if not args:
-        result.SetError("Usage: <command> <variable_name>")
-        return None, None
-
-    var_name = args[0]
-    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    if not frame.IsValid():
-        result.SetError("Cannot execute command: invalid execution context.")
-        return None, None
-
-    valobj = frame.FindVariable(var_name)
-    if not valobj or not valobj.IsValid():
-        result.SetError(f"Could not find a variable named '{var_name}'.")
-        return None, None
-
-    return var_name, valobj
-
-
 def export_list_web_command(debugger, command, result, internal_dict):
     """Implements the 'weblist' command."""
-    var_name, valobj = _get_variable_from_command(command, debugger, result)
+    _, var_name, valobj = resolve_command_variable(
+        debugger,
+        command,
+        result,
+        "weblist",
+    )
     if not valobj:
         return
     html_content = generate_list_visualization_html(valobj)
@@ -359,7 +339,12 @@ def export_list_web_command(debugger, command, result, internal_dict):
 
 def export_tree_web_command(debugger, command, result, internal_dict):
     """Implements the 'webtree' command."""
-    var_name, valobj = _get_variable_from_command(command, debugger, result)
+    _, var_name, valobj = resolve_command_variable(
+        debugger,
+        command,
+        result,
+        "webtree",
+    )
     if not valobj:
         return
     html_content = generate_tree_visualization_html(valobj)
@@ -368,7 +353,12 @@ def export_tree_web_command(debugger, command, result, internal_dict):
 
 def export_graph_web_command(debugger, command, result, internal_dict):
     """Implements the 'webgraph' command."""
-    var_name, valobj = _get_variable_from_command(command, debugger, result)
+    _, var_name, valobj = resolve_command_variable(
+        debugger,
+        command,
+        result,
+        "webgraph",
+    )
     if not valobj:
         return
     html_content = generate_graph_visualization_html(valobj)

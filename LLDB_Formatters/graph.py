@@ -13,11 +13,15 @@
 #     to a Graphviz .dot file.
 # ----------------------------------------------------------------------- #
 
-import shlex
-
+from .command_helpers import (
+    empty_structure_message,
+    find_variable,
+    resolve_command_arguments,
+)
 from .extraction import extract_graph_structure
 from .helpers import (
     Colors,
+    SUMMARY_TRUNCATION_MARKER,
     g_config,
     get_value_summary,
 )
@@ -121,7 +125,7 @@ def graph_node_summary_provider(valobj, internal_dict):
         if neighbor_summaries:
             summary += f" -> [{', '.join(neighbor_summaries)}]"
         if num_neighbors > max_neighbors:
-            summary += " ..."
+            summary += f" {SUMMARY_TRUNCATION_MARKER}"
 
     return summary
 
@@ -135,32 +139,32 @@ def export_graph_command(debugger, command, result, internal_dict):
     and writes a Graphviz .dot file to disk.
     Usage: (lldb) export_graph <variable_name> [output_file.dot]
     """
-    args = shlex.split(command)
-    if not args:
-        result.SetError("Usage: export_graph <variable_name> [output_file.dot]")
+    args, frame = resolve_command_arguments(
+        debugger,
+        command,
+        result,
+        "export_graph",
+        "<variable> [file.dot]",
+        min_args=1,
+    )
+    if not args or not frame:
         return
 
     var_name = args[0]
     output_filename = args[1] if len(args) > 1 else "graph.dot"
 
-    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    if not frame.IsValid():
-        result.SetError("Cannot execute: invalid execution context.")
-        return
-
-    graph_val = frame.FindVariable(var_name)
-    if not graph_val or not graph_val.IsValid():
-        result.SetError(f"Could not find a variable named '{var_name}'.")
+    graph_val = find_variable(frame, var_name, result)
+    if not graph_val:
         return
 
     nodes_container = resolve_graph_container_schema(graph_val).nodes_container
     if not nodes_container or not nodes_container.IsValid():
-        result.AppendMessage("Graph is empty or nodes container not found.")
+        result.AppendMessage(empty_structure_message("graph"))
         return
 
     extracted_graph = extract_graph_structure(graph_val)
     if extracted_graph.is_empty:
-        result.AppendMessage("Graph is empty or nodes container not found.")
+        result.AppendMessage(empty_structure_message("graph"))
         return
 
     dot_lines = ["digraph G {", '  rankdir="LR";', "  node [shape=circle];"]

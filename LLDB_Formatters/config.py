@@ -12,6 +12,9 @@
 # ----------------------------------------------------------------------- #
 
 
+from .command_helpers import usage_message
+
+
 class FormatterConfig:
     """
     A centralized class to hold all global configuration settings for the formatters.
@@ -96,7 +99,7 @@ def formatter_config_command(debugger, command, result, internal_dict):
 
     # Case 2: Wrong number of arguments
     if len(args) != 2:
-        result.SetError("Usage: formatter_config <setting_name> <value>")
+        result.SetError(usage_message("formatter_config", "<setting_name> <value>"))
         return
 
     # Case 3: Set a value

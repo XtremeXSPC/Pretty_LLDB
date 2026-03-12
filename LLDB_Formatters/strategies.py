@@ -24,6 +24,7 @@ except ImportError:
     pass
 
 from .helpers import (
+    SUMMARY_CYCLE_MARKER,
     _safe_get_node_from_pointer,
     get_raw_pointer,
     get_value_summary,
@@ -103,7 +104,7 @@ class LinearTraversalStrategy(TraversalStrategy):
 
             node_addr = get_raw_pointer(current_ptr)
             if node_addr in visited_addrs:
-                values.append("[CYCLE DETECTED]")
+                values.append(SUMMARY_CYCLE_MARKER)
                 break
             visited_addrs.add(node_addr)
 
@@ -217,7 +218,7 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
 
             node_addr = get_raw_pointer(node_ptr)
             if node_addr in visited_addrs:
-                values.append("[CYCLE]")
+                values.append(SUMMARY_CYCLE_MARKER)
                 return
             visited_addrs.add(node_addr)
 
@@ -287,7 +288,7 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
 
             node_addr = get_raw_pointer(node_ptr)
             if node_addr in visited_addrs:
-                values.append("[CYCLE]")
+                values.append(SUMMARY_CYCLE_MARKER)
                 return
             visited_addrs.add(node_addr)
 
@@ -402,7 +403,7 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
             if node_addr in visited_addrs:
                 # In post-order, a cycle can fill the list, so we check before appending.
                 if len(values) < max_items:
-                    values.append("[CYCLE]")
+                    values.append(SUMMARY_CYCLE_MARKER)
                 return
             visited_addrs.add(node_addr)
 

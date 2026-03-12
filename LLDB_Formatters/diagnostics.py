@@ -1,6 +1,6 @@
-import shlex
 from typing import Tuple
 
+from .command_helpers import resolve_command_variable
 from .extraction import (
     ExtractedGraphStructure,
     ExtractedLinearStructure,
@@ -8,33 +8,6 @@ from .extraction import (
     detect_structure_kind,
     extract_supported_structure,
 )
-
-
-def _get_frame(debugger, result):
-    frame = debugger.GetSelectedTarget().GetProcess().GetSelectedThread().GetSelectedFrame()
-    if not frame.IsValid():
-        result.SetError("Cannot execute command: invalid execution context.")
-        return None
-    return frame
-
-
-def _get_variable_from_command(debugger, command, result):
-    args = shlex.split(command)
-    if not args:
-        result.SetError("Usage: formatter_explain <variable_name>")
-        return None, None
-
-    frame = _get_frame(debugger, result)
-    if not frame:
-        return None, None
-
-    var_name = args[0]
-    valobj = frame.FindVariable(var_name)
-    if not valobj or not valobj.IsValid():
-        result.SetError(f"Could not find variable '{var_name}'.")
-        return None, None
-
-    return var_name, valobj
 
 
 def _append_resolution_lines(lines, extraction):
@@ -104,7 +77,12 @@ def format_extraction_report(var_name: str, valobj, structure_kind: str, extract
 
 
 def formatter_explain_command(debugger, command, result, internal_dict):
-    var_name, valobj = _get_variable_from_command(debugger, command, result)
+    _, var_name, valobj = resolve_command_variable(
+        debugger,
+        command,
+        result,
+        "formatter_explain",
+    )
     if not valobj:
         return
 

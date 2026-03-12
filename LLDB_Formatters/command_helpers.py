@@ -1,0 +1,118 @@
+import shlex
+
+
+INVALID_EXECUTION_CONTEXT_ERROR = "Cannot execute command: no selected frame."
+
+
+def usage_message(command_name, arguments=""):
+    arguments = arguments.strip()
+    if arguments:
+        return f"Usage: {command_name} {arguments}"
+    return f"Usage: {command_name}"
+
+
+def set_usage_error(result, command_name, arguments=""):
+    result.SetError(usage_message(command_name, arguments))
+
+
+def set_argument_parse_error(result, command_name, error):
+    result.SetError(f"Invalid arguments for '{command_name}': {error}.")
+
+
+def missing_variable_message(var_name):
+    return f"Could not find variable '{var_name}'."
+
+
+def empty_structure_message(structure_name):
+    return f"{structure_name.capitalize()} is empty."
+
+
+def _is_valid_handle(handle):
+    if not handle:
+        return False
+
+    is_valid = getattr(handle, "IsValid", None)
+    if callable(is_valid):
+        return bool(is_valid())
+    return True
+
+
+def parse_command_arguments(command, result, command_name, arguments="", min_args=1):
+    try:
+        args = shlex.split(command)
+    except ValueError as error:
+        set_argument_parse_error(result, command_name, error)
+        return None
+
+    if len(args) < min_args:
+        set_usage_error(result, command_name, arguments)
+        return None
+    return args
+
+
+def resolve_selected_frame(debugger, result):
+    if not debugger:
+        result.SetError(INVALID_EXECUTION_CONTEXT_ERROR)
+        return None
+
+    target = debugger.GetSelectedTarget()
+    if not _is_valid_handle(target):
+        result.SetError(INVALID_EXECUTION_CONTEXT_ERROR)
+        return None
+
+    process = target.GetProcess()
+    if not _is_valid_handle(process):
+        result.SetError(INVALID_EXECUTION_CONTEXT_ERROR)
+        return None
+
+    thread = process.GetSelectedThread()
+    if not _is_valid_handle(thread):
+        result.SetError(INVALID_EXECUTION_CONTEXT_ERROR)
+        return None
+
+    frame = thread.GetSelectedFrame()
+    if not _is_valid_handle(frame):
+        result.SetError(INVALID_EXECUTION_CONTEXT_ERROR)
+        return None
+
+    return frame
+
+
+def find_variable(frame, var_name, result):
+    valobj = frame.FindVariable(var_name)
+    if not _is_valid_handle(valobj):
+        result.SetError(missing_variable_message(var_name))
+        return None
+    return valobj
+
+
+def resolve_command_arguments(debugger, command, result, command_name, arguments="", min_args=1):
+    args = parse_command_arguments(command, result, command_name, arguments, min_args=min_args)
+    if args is None:
+        return None, None
+
+    frame = resolve_selected_frame(debugger, result)
+    if not frame:
+        return None, None
+
+    return args, frame
+
+
+def resolve_command_variable(debugger, command, result, command_name, arguments="<variable>"):
+    args, frame = resolve_command_arguments(
+        debugger,
+        command,
+        result,
+        command_name,
+        arguments,
+        min_args=1,
+    )
+    if not args or not frame:
+        return None, None, None
+
+    var_name = args[0]
+    valobj = find_variable(frame, var_name, result)
+    if not valobj:
+        return None, None, None
+
+    return args, var_name, valobj

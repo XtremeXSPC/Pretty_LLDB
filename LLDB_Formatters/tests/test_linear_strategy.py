@@ -81,7 +81,7 @@ class TestLinearStrategy(unittest.TestCase):
         strategy = LinearTraversalStrategy()
         values, _ = strategy.traverse(head, max_items=100)
 
-        self.assertEqual(values, ["10", "20", "30", "[CYCLE DETECTED]"])
+        self.assertEqual(values, ["10", "20", "30", "[CYCLE]"])
 
 
 if __name__ == "__main__":
