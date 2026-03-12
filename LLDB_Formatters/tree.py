@@ -21,6 +21,7 @@ from .command_helpers import (
     find_variable,
     resolve_command_arguments,
     resolve_command_variable,
+    unsupported_layout_message,
 )
 from .extraction import extract_tree_structure
 from .helpers import (
@@ -41,6 +42,7 @@ from .schema_adapters import (
     resolve_tree_node_schema,
 )
 from .strategies import InOrderTreeStrategy, PostOrderTreeStrategy, PreOrderTreeStrategy
+from .summary_contract import append_incomplete_marker, unsupported_layout_summary
 from .synthetic_support import create_synthetic_child, parse_synthetic_child_index
 
 
@@ -132,12 +134,13 @@ def tree_summary_provider(valobj, internal_dict):
     C_RED = Colors.RED if use_colors else ""
     diagnostics_suffix = ""
 
-    extraction = None
+    extraction = extract_tree_structure(valobj)
     if g_config.diagnostics_enabled:
-        extraction = extract_tree_structure(valobj)
         diagnostics_suffix = extraction.diagnostics.compact_summary()
-        if extraction.is_empty or extraction.error_message:
-            return f"Tree is empty{diagnostics_suffix}"
+    if extraction.error_message:
+        return unsupported_layout_summary("tree", diagnostics_suffix)
+    if extraction.is_empty:
+        return f"Tree is empty{diagnostics_suffix}"
 
     container_schema = resolve_tree_container_schema(valobj)
     root_node_ptr = container_schema.root_ptr
@@ -166,7 +169,13 @@ def tree_summary_provider(valobj, internal_dict):
     elif container_schema.size_member:
         size_str = f"{C_GREEN}size = {container_schema.size_member.GetValueAsUnsigned()}{C_RESET}, "
 
-    return f"{size_str}[{summary_str}] ({strategy_name}){diagnostics_suffix}"
+    summary = f"{size_str}[{summary_str}] ({strategy_name})"
+    summary = append_incomplete_marker(
+        summary,
+        extraction,
+        visible_warning_codes=("cycle_detected",),
+    )
+    return f"{summary}{diagnostics_suffix}"
 
 
 # ------- Helper to recursively "draw" the tree for 'pptree' commands ------- #
@@ -223,10 +232,15 @@ def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
     if not tree_val:
         return
 
-    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
-    if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
+    extraction = extract_tree_structure(tree_val)
+    if extraction.error_message:
+        result.SetError(unsupported_layout_message("tree"))
+        return
+    if extraction.is_empty:
         result.AppendMessage(empty_structure_message("tree"))
         return
+
+    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
 
     result.AppendMessage(
         f"{tree_val.GetTypeName()} at {tree_val.GetAddress()} ({order.capitalize()}):"
@@ -302,10 +316,15 @@ def export_tree_command(debugger, command, result, internal_dict):
     if not tree_val:
         return
 
-    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
-    if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
+    extraction = extract_tree_structure(tree_val)
+    if extraction.error_message:
+        result.SetError(unsupported_layout_message("tree"))
+        return
+    if extraction.is_empty:
         result.AppendMessage(empty_structure_message("tree"))
         return
+
+    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
 
     # Define available strategies.
     strategy_map = {

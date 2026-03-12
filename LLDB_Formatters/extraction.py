@@ -252,7 +252,7 @@ def extract_linear_structure(valobj, max_items: Optional[int] = None) -> Extract
         extraction.size = container_schema.size_member.GetValueAsUnsigned()
 
     if not container_schema.head_ptr and not extraction.head_field:
-        extraction.error_message = "Error: Could not find head pointer member."
+        extraction.error_message = "Unsupported linear layout: missing head pointer member."
         diagnostics.warn("missing_head", "Could not find a valid head/top member.")
         return extraction
 
@@ -264,7 +264,7 @@ def extract_linear_structure(valobj, max_items: Optional[int] = None) -> Extract
 
     first_node = _safe_get_node_from_pointer(container_schema.head_ptr)
     if not first_node or not first_node.IsValid():
-        extraction.error_message = "Error: Could not dereference head pointer."
+        extraction.error_message = "Could not dereference the resolved head pointer."
         diagnostics.warn("invalid_head", "The resolved head pointer could not be dereferenced.")
         return extraction
 
@@ -274,7 +274,7 @@ def extract_linear_structure(valobj, max_items: Optional[int] = None) -> Extract
     extraction.is_doubly_linked = node_schema.prev_field is not None
 
     if not extraction.next_field or not extraction.value_field:
-        extraction.error_message = "Error: Could not determine node structure (val/next)"
+        extraction.error_message = "Unsupported linear layout: missing node value/next fields."
         diagnostics.warn(
             "missing_node_schema",
             "Could not determine the linear node value/next fields.",
@@ -349,7 +349,7 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
         extraction.size = container_schema.size_member.GetValueAsUnsigned()
 
     if not container_schema.root_ptr and not extraction.root_field:
-        extraction.error_message = "Tree is empty or root member not found."
+        extraction.error_message = "Unsupported tree layout: missing root member."
         diagnostics.warn("missing_root", "Could not find a valid root member.")
         return extraction
 
@@ -431,15 +431,13 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
         extraction.num_edges = container_schema.edge_count_member.GetValueAsUnsigned()
 
     if not container_schema.nodes_container and not extraction.nodes_field:
-        extraction.error_message = "Graph is empty or nodes container not found."
-        extraction.is_empty = True
+        extraction.error_message = "Unsupported graph layout: missing nodes container."
         diagnostics.warn("missing_nodes", "Could not find a valid graph nodes container.")
         return extraction
 
     nodes_container = container_schema.nodes_container
     if not nodes_container or not nodes_container.IsValid():
-        extraction.error_message = "Graph is empty or nodes container not found."
-        extraction.is_empty = True
+        extraction.error_message = "Unsupported graph layout: missing nodes container."
         diagnostics.warn("missing_nodes", "Could not resolve the graph nodes container value.")
         return extraction
 

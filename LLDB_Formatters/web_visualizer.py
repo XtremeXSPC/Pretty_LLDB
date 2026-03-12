@@ -29,7 +29,11 @@ import os
 import tempfile
 import webbrowser
 
-from .command_helpers import resolve_command_variable
+from .command_helpers import (
+    empty_structure_message,
+    resolve_command_variable,
+    unsupported_layout_message,
+)
 from .extraction import (
     extract_graph_structure,
     extract_linear_structure,
@@ -323,6 +327,16 @@ def _display_html_content(html_content, var_name, result):
         result.SetError(f"Failed to create or open the HTML file: {e}")
 
 
+def _validate_visualizable_structure(result, structure_name, extraction):
+    if extraction.error_message:
+        result.SetError(unsupported_layout_message(structure_name))
+        return False
+    if extraction.is_empty:
+        result.AppendMessage(empty_structure_message(structure_name))
+        return False
+    return True
+
+
 def export_list_web_command(debugger, command, result, internal_dict):
     """Implements the 'weblist' command."""
     _, var_name, valobj = resolve_command_variable(
@@ -332,6 +346,9 @@ def export_list_web_command(debugger, command, result, internal_dict):
         "weblist",
     )
     if not valobj:
+        return
+    extraction = extract_linear_structure(valobj)
+    if not _validate_visualizable_structure(result, "list", extraction):
         return
     html_content = generate_list_visualization_html(valobj)
     _display_html_content(html_content, var_name, result)
@@ -347,6 +364,9 @@ def export_tree_web_command(debugger, command, result, internal_dict):
     )
     if not valobj:
         return
+    extraction = extract_tree_structure(valobj)
+    if not _validate_visualizable_structure(result, "tree", extraction):
+        return
     html_content = generate_tree_visualization_html(valobj)
     _display_html_content(html_content, var_name, result)
 
@@ -360,6 +380,9 @@ def export_graph_web_command(debugger, command, result, internal_dict):
         "webgraph",
     )
     if not valobj:
+        return
+    extraction = extract_graph_structure(valobj)
+    if not _validate_visualizable_structure(result, "graph", extraction):
         return
     html_content = generate_graph_visualization_html(valobj)
     _display_html_content(html_content, var_name, result)

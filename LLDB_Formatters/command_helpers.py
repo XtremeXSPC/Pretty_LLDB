@@ -27,6 +27,10 @@ def empty_structure_message(structure_name):
     return f"{structure_name.capitalize()} is empty."
 
 
+def unsupported_layout_message(structure_name):
+    return f"{structure_name.capitalize()} layout is unsupported."
+
+
 def _is_valid_handle(handle):
     if not handle:
         return False

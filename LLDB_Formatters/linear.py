@@ -27,6 +27,7 @@ from .helpers import (
 )
 from .registry import register_summary, register_synthetic
 from .schema_adapters import get_resolved_child, resolve_linear_container_schema, resolve_linear_node_schema
+from .summary_contract import append_incomplete_marker, unsupported_layout_summary
 from .synthetic_support import create_synthetic_child, parse_synthetic_child_index
 
 
@@ -113,7 +114,7 @@ def linear_container_summary_provider(valobj, internal_dict):
     )
 
     if extraction.error_message:
-        return f"{extraction.error_message}{diagnostics_suffix}"
+        return unsupported_layout_summary("linear", diagnostics_suffix)
 
     if extraction.is_empty:
         return f"size = 0, []{diagnostics_suffix}"
@@ -155,7 +156,13 @@ def linear_container_summary_provider(valobj, internal_dict):
     if extraction.truncated:
         summary_str += f" {separator.strip()} {SUMMARY_TRUNCATION_MARKER}"
 
-    return f"{C_GREEN}{size_str}{C_RESET}, [{summary_str}]{diagnostics_suffix}"
+    summary = f"{C_GREEN}{size_str}{C_RESET}, [{summary_str}]"
+    summary = append_incomplete_marker(
+        summary,
+        extraction,
+        visible_warning_codes=("cycle_detected", "truncated"),
+    )
+    return f"{summary}{diagnostics_suffix}"
 
 
 @register_summary(r"^std::__1::vector<.*>$")

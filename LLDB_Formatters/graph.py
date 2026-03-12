@@ -17,6 +17,7 @@ from .command_helpers import (
     empty_structure_message,
     find_variable,
     resolve_command_arguments,
+    unsupported_layout_message,
 )
 from .extraction import extract_graph_structure
 from .helpers import (
@@ -31,6 +32,7 @@ from .schema_adapters import (
     resolve_graph_container_schema,
     resolve_graph_node_schema,
 )
+from .summary_contract import append_incomplete_marker, unsupported_layout_summary
 from .synthetic_support import parse_synthetic_child_index
 
 # -------------- Formatter for Graphs (Synthetic Children) -------------- #
@@ -75,19 +77,22 @@ class GraphProvider:
         Returns a concise one-line text summary for the entire graph object.
         This summary is typically displayed next to the variable name.
         """
-        container_schema = resolve_graph_container_schema(self.valobj)
-        num_nodes_member = container_schema.node_count_member
-        num_edges_member = container_schema.edge_count_member
+        extraction = extract_graph_structure(self.valobj)
+        diagnostics_suffix = (
+            extraction.diagnostics.compact_summary() if g_config.diagnostics_enabled else ""
+        )
+        if extraction.error_message:
+            return unsupported_layout_summary("graph", diagnostics_suffix)
+        if extraction.is_empty:
+            return f"Graph is empty{diagnostics_suffix}"
 
-        # Summaries in GUI panels should be colorless.
         summary = "Graph"
-        if num_nodes_member:
-            summary += f" | V = {num_nodes_member.GetValueAsUnsigned()}"
-        if num_edges_member:
-            summary += f" | E = {num_edges_member.GetValueAsUnsigned()}"
-        if g_config.diagnostics_enabled:
-            extraction = extract_graph_structure(self.valobj)
-            summary += extraction.diagnostics.compact_summary()
+        if extraction.num_nodes is not None:
+            summary += f" | V = {extraction.num_nodes}"
+        if extraction.num_edges is not None:
+            summary += f" | E = {extraction.num_edges}"
+        summary = append_incomplete_marker(summary, extraction)
+        summary += diagnostics_suffix
         return summary
 
 
@@ -101,6 +106,9 @@ def graph_node_summary_provider(valobj, internal_dict):
     a list of its immediate neighbors.
     """
     schema = resolve_graph_node_schema(valobj)
+    if not schema.value_field or not schema.neighbors_field:
+        return unsupported_layout_summary("graph")
+
     node_value = get_resolved_child(valobj, schema.value_field)
     neighbors = get_resolved_child(valobj, schema.neighbors_field)
 
@@ -160,12 +168,10 @@ def export_graph_command(debugger, command, result, internal_dict):
     if not graph_val:
         return
 
-    nodes_container = resolve_graph_container_schema(graph_val).nodes_container
-    if not nodes_container or not nodes_container.IsValid():
-        result.AppendMessage(empty_structure_message("graph"))
-        return
-
     extracted_graph = extract_graph_structure(graph_val)
+    if extracted_graph.error_message:
+        result.SetError(unsupported_layout_message("graph"))
+        return
     if extracted_graph.is_empty:
         result.AppendMessage(empty_structure_message("graph"))
         return

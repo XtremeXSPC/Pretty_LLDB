@@ -44,8 +44,8 @@ def formatter_help_command(debugger, command, result, internal_dict):
 {C_TTL}-----------------------------------------{C_RST}
 
 {C_CMD}Configuration:{C_RST}
-  formatter_config [{C_ARG}<key> <value>{C_RST}]
-    - View or change global settings.
+  formatter_config [{C_ARG}<setting> [value]{C_RST}]
+    - View, inspect, reset, or change global settings.
     - Example: `formatter_config tree_traversal_strategy inorder`
 
   formatter_explain [{C_ARG}<variable>{C_RST}] (alias: `fexplain`)

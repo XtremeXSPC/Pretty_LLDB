@@ -5,14 +5,127 @@
 # This module implements the user-facing configuration command for the
 # formatters. It centralizes all global settings into a single
 # configuration object, 'g_config', making them easy to manage.
-#
-# It contains the implementation for the 'formatter_config' command,
-# which provides a runtime interface to inspect and modify these settings
-# directly from the LLDB console.
 # ----------------------------------------------------------------------- #
 
+import shlex
+from dataclasses import dataclass
 
-from .command_helpers import usage_message
+from .command_helpers import set_argument_parse_error, usage_message
+
+
+@dataclass(frozen=True)
+class FormatterSettingSpec:
+    key: str
+    default: object
+    description: str
+    value_kind: str
+    choices: tuple[str, ...] = ()
+
+
+SETTING_SPECS = (
+    FormatterSettingSpec(
+        key="summary_max_items",
+        default=30,
+        description="Max items for list/tree summaries.",
+        value_kind="integer",
+    ),
+    FormatterSettingSpec(
+        key="synthetic_max_children",
+        default=30,
+        description="Max synthetic children when expanding list/tree formatters.",
+        value_kind="integer",
+    ),
+    FormatterSettingSpec(
+        key="graph_max_neighbors",
+        default=10,
+        description="Max neighbors in graph node summaries.",
+        value_kind="integer",
+    ),
+    FormatterSettingSpec(
+        key="tree_traversal_strategy",
+        default="preorder",
+        description="Traversal order for tree summaries.",
+        value_kind="choice",
+        choices=("preorder", "inorder", "postorder"),
+    ),
+    FormatterSettingSpec(
+        key="diagnostics_enabled",
+        default=False,
+        description="Append compact extraction diagnostics to formatter output.",
+        value_kind="boolean",
+    ),
+    FormatterSettingSpec(
+        key="debug_enabled",
+        default=False,
+        description="Emit verbose formatter debug logs to the LLDB console.",
+        value_kind="boolean",
+    ),
+)
+
+SETTING_SPECS_BY_KEY = {spec.key: spec for spec in SETTING_SPECS}
+
+
+def _parse_bool(value_str):
+    normalized = value_str.strip().lower()
+    truth_map = {
+        "1": True,
+        "true": True,
+        "yes": True,
+        "on": True,
+        "0": False,
+        "false": False,
+        "no": False,
+        "off": False,
+    }
+    if normalized not in truth_map:
+        raise ValueError(
+            f"Invalid value '{value_str}'. Valid boolean options are: true, false, on, off, yes, no, 1, 0."
+        )
+    return truth_map[normalized]
+
+
+def _parse_non_negative_int(value_str):
+    try:
+        value = int(value_str)
+    except ValueError as error:
+        raise ValueError(f"Invalid value '{value_str}'. Expected a non-negative integer.") from error
+
+    if value < 0:
+        raise ValueError(f"Invalid value '{value_str}'. Expected a non-negative integer.")
+    return value
+
+
+def _parse_choice(value_str, spec):
+    normalized = value_str.lower()
+    if normalized not in spec.choices:
+        raise ValueError(
+            f"Invalid value '{value_str}'. Valid options for {spec.key} are: {', '.join(spec.choices)}."
+        )
+    return normalized
+
+
+def _parse_setting_value(spec, value_str):
+    if spec.value_kind == "integer":
+        return _parse_non_negative_int(value_str)
+    if spec.value_kind == "boolean":
+        return _parse_bool(value_str)
+    if spec.value_kind == "choice":
+        return _parse_choice(value_str, spec)
+    raise ValueError(f"Unsupported setting kind '{spec.value_kind}'.")
+
+
+def _format_setting_value(value):
+    if isinstance(value, str):
+        return f"'{value}'"
+    return str(value)
+
+
+def _setting_usage(spec):
+    if spec.value_kind == "choice":
+        return f"{spec.key} <{'|'.join(spec.choices)}>"
+    if spec.value_kind == "boolean":
+        return f"{spec.key} <true|false>"
+    return f"{spec.key} <integer>"
 
 
 class FormatterConfig:
@@ -22,135 +135,100 @@ class FormatterConfig:
     """
 
     def __init__(self):
-        # The maximum number of items to display in a summary for linear
-        # containers and trees.
-        self.summary_max_items = 30
+        self.reset()
 
-        # The maximum number of synthetic children exposed when expanding
-        # a formatted structure in the debugger variables view.
-        self.synthetic_max_children = 30
-
-        # The maximum number of neighbors to display in a graph node's summary.
-        self.graph_max_neighbors = 10
-
-        # The default traversal strategy for tree summaries.
-        # Can be changed at runtime to 'inorder', 'postorder', etc.
-        self.tree_traversal_strategy = "preorder"
-
-        # Enables compact diagnostics appended to formatter output.
-        self.diagnostics_enabled = False
-
-        # Enables verbose debug prints in the LLDB console.
-        self.debug_enabled = False
+    def reset(self):
+        for spec in SETTING_SPECS:
+            setattr(self, spec.key, spec.default)
 
 
 # Create a single global instance of the configuration object.
-# This instance is imported and used by other modules to access settings.
 g_config = FormatterConfig()
+
+
+def _append_settings_overview(result):
+    result.AppendMessage("Current formatter settings:")
+    for spec in SETTING_SPECS:
+        current_value = getattr(g_config, spec.key)
+        result.AppendMessage(
+            f"  - {spec.key} = {_format_setting_value(current_value)} "
+            f"(default: {_format_setting_value(spec.default)})"
+        )
+        result.AppendMessage(f"    {spec.description}")
+        if spec.choices:
+            result.AppendMessage(f"    Options: {', '.join(spec.choices)}")
+
+    result.AppendMessage(
+        "\nUse 'formatter_config <setting>' to inspect one setting, "
+        "'formatter_config <setting> <value>' to update it, or "
+        "'formatter_config reset' to restore defaults."
+    )
+
+
+def _append_setting_detail(result, spec):
+    current_value = getattr(g_config, spec.key)
+    result.AppendMessage(f"{spec.key} = {_format_setting_value(current_value)}")
+    result.AppendMessage(f"Default: {_format_setting_value(spec.default)}")
+    result.AppendMessage(f"Type: {spec.value_kind}")
+    result.AppendMessage(f"Description: {spec.description}")
+    if spec.choices:
+        result.AppendMessage(f"Options: {', '.join(spec.choices)}")
+    result.AppendMessage(f"Usage: formatter_config {_setting_usage(spec)}")
 
 
 def formatter_config_command(debugger, command, result, internal_dict):
     """
     Implements the 'formatter_config' command to view and change global settings.
     Usage:
-      formatter_config                # View current settings and their descriptions.
-      formatter_config <key> <value>  # Set a new value for a setting.
+      formatter_config
+      formatter_config <setting>
+      formatter_config <setting> <value>
+      formatter_config reset
     """
-    args = command.split()
+    try:
+        args = shlex.split(command)
+    except ValueError as error:
+        set_argument_parse_error(result, "formatter_config", error)
+        return
 
-    def _parse_bool(value_str):
-        normalized = value_str.strip().lower()
-        truth_map = {
-            "1": True,
-            "true": True,
-            "yes": True,
-            "on": True,
-            "0": False,
-            "false": False,
-            "no": False,
-            "off": False,
-        }
-        if normalized not in truth_map:
-            raise ValueError
-        return truth_map[normalized]
-
-    # Case 1: No arguments
-    # Print current settings and their descriptions.
     if len(args) == 0:
-        result.AppendMessage("Current Formatter Settings:")
-        result.AppendMessage(
-            f"  - summary_max_items: {g_config.summary_max_items} "
-            "(Max items for list/tree summaries)"
-        )
-        result.AppendMessage(
-            f"  - synthetic_max_children: {g_config.synthetic_max_children} "
-            "(Max synthetic children when expanding list/tree formatters)"
-        )
-        result.AppendMessage(
-            f"  - graph_max_neighbors: {g_config.graph_max_neighbors} "
-            "(Max neighbors in graph node summaries)"
-        )
-        result.AppendMessage(
-            f"  - tree_traversal_strategy: '{g_config.tree_traversal_strategy}' "
-            "(Traversal order for tree summaries. Options: preorder, inorder, postorder)"
-        )
-        result.AppendMessage(
-            f"  - diagnostics_enabled: {g_config.diagnostics_enabled} "
-            "(Append compact extraction diagnostics to formatter output)"
-        )
-        result.AppendMessage(
-            f"  - debug_enabled: {g_config.debug_enabled} "
-            "(Emit verbose formatter debug logs to the LLDB console)"
-        )
-        result.AppendMessage("\nUse 'formatter_config <key> <value>' to change a setting.")
+        _append_settings_overview(result)
         return
 
-    # Case 2: Wrong number of arguments
-    if len(args) != 2:
-        result.SetError(usage_message("formatter_config", "<setting_name> <value>"))
+    if len(args) > 2:
+        result.SetError(usage_message("formatter_config", "[<setting_name> [<value>]]"))
         return
 
-    # Case 3: Set a value
-    key = args[0]
-    value_str = args[1]
+    if len(args) == 1:
+        key = args[0]
+        if key == "reset":
+            g_config.reset()
+            result.AppendMessage("Reset formatter settings to defaults.")
+            return
 
-    # Handle integer-based settings
-    if key in ["summary_max_items", "synthetic_max_children", "graph_max_neighbors"]:
-        try:
-            value = int(value_str)
-            setattr(g_config, key, value)
-            result.AppendMessage(f"Set {key} -> {value}")
-        except ValueError:
-            result.SetError(f"Invalid value. '{value_str}' is not a valid integer for '{key}'.")
-        except AttributeError:
-            result.SetError(f"Unknown setting '{key}'.")
-
-    # Handle string-based settings
-    elif key == "tree_traversal_strategy":
-        valid_strategies = ["preorder", "inorder", "postorder"]
-        if value_str.lower() in valid_strategies:
-            g_config.tree_traversal_strategy = value_str.lower()
-            result.AppendMessage(
-                f"Set tree_traversal_strategy -> '{g_config.tree_traversal_strategy}'"
-            )
-        else:
+        spec = SETTING_SPECS_BY_KEY.get(key)
+        if not spec:
             result.SetError(
-                f"Invalid value '{value_str}'. Valid options for tree_traversal_strategy are: {', '.join(valid_strategies)}"
+                f"Unknown setting '{key}'. Available settings are: {', '.join(spec.key for spec in SETTING_SPECS)}."
             )
+            return
 
-    elif key in ["diagnostics_enabled", "debug_enabled"]:
-        try:
-            value = _parse_bool(value_str)
-            setattr(g_config, key, value)
-            result.AppendMessage(f"Set {key} -> {value}")
-        except ValueError:
-            result.SetError(
-                f"Invalid value '{value_str}'. Valid boolean options are: true, false, on, off, yes, no, 1, 0."
-            )
+        _append_setting_detail(result, spec)
+        return
 
-    # Handle unknown settings
-    else:
-        available_settings = [k for k in dir(g_config) if not k.startswith("__")]
+    key, value_str = args
+    spec = SETTING_SPECS_BY_KEY.get(key)
+    if not spec:
         result.SetError(
-            f"Unknown setting '{key}'.\nAvailable settings are: {', '.join(available_settings)}"
+            f"Unknown setting '{key}'. Available settings are: {', '.join(spec.key for spec in SETTING_SPECS)}."
         )
+        return
+
+    try:
+        value = _parse_setting_value(spec, value_str)
+    except ValueError as error:
+        result.SetError(str(error))
+        return
+
+    setattr(g_config, key, value)
+    result.AppendMessage(f"Set {key} -> {_format_setting_value(value)}")
