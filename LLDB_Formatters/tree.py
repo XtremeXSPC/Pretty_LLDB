@@ -33,18 +33,85 @@ from .helpers import (
     get_value_summary,
     should_use_colors,
 )
-from .registry import register_summary
+from .registry import register_summary, register_synthetic
 from .schema_adapters import (
     get_resolved_child,
     get_tree_children,
     resolve_tree_container_schema,
     resolve_tree_node_schema,
 )
-from .strategies import (
-    InOrderTreeStrategy,
-    PostOrderTreeStrategy,
-    PreOrderTreeStrategy,
-)
+from .strategies import InOrderTreeStrategy, PostOrderTreeStrategy, PreOrderTreeStrategy
+from .synthetic_support import create_synthetic_child, parse_synthetic_child_index
+
+
+def _get_tree_strategy(strategy_name=None):
+    resolved_name = strategy_name or g_config.tree_traversal_strategy
+    if resolved_name == "inorder":
+        return InOrderTreeStrategy(), "inorder"
+    if resolved_name == "postorder":
+        return PostOrderTreeStrategy(), "postorder"
+    return PreOrderTreeStrategy(), "preorder"
+
+
+def _collect_tree_nodes_by_address(root_ptr):
+    nodes_by_address = {}
+    visited_addrs = set()
+
+    def _visit(node_ptr):
+        node_addr = get_raw_pointer(node_ptr)
+        if node_addr == 0 or node_addr in visited_addrs:
+            return
+        visited_addrs.add(node_addr)
+
+        node = _safe_get_node_from_pointer(node_ptr)
+        if not node or not node.IsValid():
+            return
+
+        nodes_by_address[node_addr] = node
+        schema = resolve_tree_node_schema(node)
+        for child_ptr in get_tree_children(node, schema):
+            _visit(child_ptr)
+
+    _visit(root_ptr)
+    return nodes_by_address
+
+
+@register_synthetic(r"^(Custom|My)?(Binary)?Tree<.*>$")
+class TreeProvider:
+    def __init__(self, valobj, internal_dict):
+        self.valobj = valobj
+        self.children = []
+
+    def update(self):
+        self.children = []
+
+        root_ptr = resolve_tree_container_schema(self.valobj).root_ptr
+        if not root_ptr or get_raw_pointer(root_ptr) == 0:
+            return
+
+        strategy, _ = _get_tree_strategy()
+        ordered_addresses = strategy.ordered_addresses(root_ptr, g_config.synthetic_max_children)
+        nodes_by_address = _collect_tree_nodes_by_address(root_ptr)
+
+        for index, address in enumerate(ordered_addresses):
+            node = nodes_by_address.get(address)
+            child = create_synthetic_child(self.valobj, f"[{index}]", address, node)
+            if child:
+                self.children.append(child)
+
+    def num_children(self):
+        self.update()
+        return len(self.children)
+
+    def get_child_at_index(self, index):
+        self.update()
+        if 0 <= index < len(self.children):
+            return self.children[index]
+        return None
+
+    def get_child_index(self, name):
+        return parse_synthetic_child_index(name)
+
 
 # ------------------- Summary Provider for Tree Root ------------------- #
 
@@ -58,7 +125,6 @@ def tree_summary_provider(valobj, internal_dict):
     """
     use_colors = should_use_colors()
 
-    # Color Definitions
     C_GREEN = Colors.GREEN if use_colors else ""
     C_YELLOW = Colors.YELLOW if use_colors else ""
     C_CYAN = Colors.BOLD_CYAN if use_colors else ""
@@ -73,28 +139,17 @@ def tree_summary_provider(valobj, internal_dict):
         if extraction.is_empty or extraction.error_message:
             return f"Tree is empty{diagnostics_suffix}"
 
-    # Get Tree Root
     container_schema = resolve_tree_container_schema(valobj)
     root_node_ptr = container_schema.root_ptr
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
         return f"Tree is empty{diagnostics_suffix}"
 
-    # Strategy Selection
-    strategy_name = g_config.tree_traversal_strategy
-    if strategy_name == "inorder":
-        strategy = InOrderTreeStrategy()
-    elif strategy_name == "postorder":
-        strategy = PostOrderTreeStrategy()
-    else:  # Default to pre-order
-        strategy = PreOrderTreeStrategy()
-
-    # Traversal
+    strategy, strategy_name = _get_tree_strategy()
     values, metadata = strategy.traverse(root_node_ptr, g_config.summary_max_items)
 
-    # Formatting
     colored_values = []
     for v in values:
-        if v.startswith("["):  # Cycle
+        if v.startswith("["):
             colored_values.append(f"{C_RED}{v}{C_RESET}")
         else:
             colored_values.append(f"{C_YELLOW}{v}{C_RESET}")

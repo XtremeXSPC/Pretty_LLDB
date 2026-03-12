@@ -13,7 +13,7 @@
 # ----------------------------------------------------------------------- #
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # The 'lldb' module is not available in a standard Python interpreter.
 # We use this block to allow type hinting without causing an ImportError
@@ -156,7 +156,14 @@ class TreeTraversalStrategy(TraversalStrategy):
         # The first two lines are added by the caller, so we just return the body.
         return dot_lines, {}
 
-    def _get_ordered_addresses(self, root_ptr: "lldb.SBValue") -> List[int]:
+    def ordered_addresses(
+        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
+    ) -> List[int]:
+        return self._get_ordered_addresses(root_ptr, max_items=max_items)
+
+    def _get_ordered_addresses(
+        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
+    ) -> List[int]:
         """
         An internal traversal implementation that returns a list of node
         addresses in the specific traversal order of the strategy.
@@ -241,13 +248,17 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
         metadata: Dict[str, Any] = {"truncated": len(values) >= max_items}
         return values, metadata
 
-    def _get_ordered_addresses(self, root_ptr: "lldb.SBValue") -> List[int]:
+    def _get_ordered_addresses(
+        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
+    ) -> List[int]:
         """Returns a list of node addresses in pre-order."""
         addresses: List[int] = []
         visited_addrs = set()
 
         def _recursive_traverse_addr(node_ptr):
             if not node_ptr or get_raw_pointer(node_ptr) == 0:
+                return
+            if max_items is not None and len(addresses) >= max_items:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -345,13 +356,17 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
         metadata: Dict[str, Any] = {"truncated": len(values) >= max_items}
         return values, metadata
 
-    def _get_ordered_addresses(self, root_ptr: "lldb.SBValue") -> List[int]:
+    def _get_ordered_addresses(
+        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
+    ) -> List[int]:
         """Returns a list of node addresses in in-order."""
         addresses: List[int] = []
         visited_addrs = set()
 
         def _recursive_traverse_addr(node_ptr):
             if not node_ptr or get_raw_pointer(node_ptr) == 0:
+                return
+            if max_items is not None and len(addresses) >= max_items:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -371,14 +386,22 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
             if is_binary:
                 if left and get_raw_pointer(left) != 0:
                     _recursive_traverse_addr(left)
+                if max_items is not None and len(addresses) >= max_items:
+                    return
                 addresses.append(node_addr)
+                if max_items is not None and len(addresses) >= max_items:
+                    return
                 if right and get_raw_pointer(right) != 0:
                     _recursive_traverse_addr(right)
             else:
                 children = get_tree_children(node, schema)
                 if children:
                     _recursive_traverse_addr(children[0])
+                if max_items is not None and len(addresses) >= max_items:
+                    return
                 addresses.append(node_addr)
+                if max_items is not None and len(addresses) >= max_items:
+                    return
                 for i in range(1, len(children)):
                     _recursive_traverse_addr(children[i])
 
@@ -428,13 +451,17 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
         metadata: Dict[str, Any] = {"truncated": len(values) >= max_items}
         return values, metadata
 
-    def _get_ordered_addresses(self, root_ptr: "lldb.SBValue") -> List[int]:
+    def _get_ordered_addresses(
+        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
+    ) -> List[int]:
         """Returns a list of node addresses in post-order."""
         addresses: List[int] = []
         visited_addrs = set()
 
         def _recursive_traverse_addr(node_ptr):
             if not node_ptr or get_raw_pointer(node_ptr) == 0:
+                return
+            if max_items is not None and len(addresses) >= max_items:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -447,7 +474,11 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
                 children = get_tree_children(node, resolve_tree_node_schema(node))
                 for child in children:
                     _recursive_traverse_addr(child)
+                    if max_items is not None and len(addresses) >= max_items:
+                        return
 
+            if max_items is not None and len(addresses) >= max_items:
+                return
             addresses.append(node_addr)
 
         _recursive_traverse_addr(root_ptr)

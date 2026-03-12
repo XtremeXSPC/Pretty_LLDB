@@ -26,6 +26,10 @@ class FormatterConfig:
         # containers and trees.
         self.summary_max_items = 30
 
+        # The maximum number of synthetic children exposed when expanding
+        # a formatted structure in the debugger variables view.
+        self.synthetic_max_children = 30
+
         # The maximum number of neighbors to display in a graph node's summary.
         self.graph_max_neighbors = 10
 
@@ -79,6 +83,10 @@ def formatter_config_command(debugger, command, result, internal_dict):
             "(Max items for list/tree summaries)"
         )
         result.AppendMessage(
+            f"  - synthetic_max_children: {g_config.synthetic_max_children} "
+            "(Max synthetic children when expanding list/tree formatters)"
+        )
+        result.AppendMessage(
             f"  - graph_max_neighbors: {g_config.graph_max_neighbors} "
             "(Max neighbors in graph node summaries)"
         )
@@ -107,7 +115,7 @@ def formatter_config_command(debugger, command, result, internal_dict):
     value_str = args[1]
 
     # Handle integer-based settings
-    if key in ["summary_max_items", "graph_max_neighbors"]:
+    if key in ["summary_max_items", "synthetic_max_children", "graph_max_neighbors"]:
         try:
             value = int(value_str)
             setattr(g_config, key, value)

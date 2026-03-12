@@ -59,6 +59,47 @@ class TestLLDBIntegration(unittest.TestCase):
         self.assertIn("my_tree = size = 3", output)
         self.assertIn("[2 -> 1 -> 3] (preorder)", output)
 
+    def test_linear_synthetic_children_are_available_in_real_lldb(self):
+        output = self._run_commands(
+            [
+                (
+                    'script frame = lldb.debugger.GetSelectedTarget().GetProcess().'
+                    'GetSelectedThread().GetSelectedFrame(); '
+                    'value = frame.FindVariable("my_list").GetSyntheticValue(); '
+                    'child0 = value.GetChildAtIndex(0); child1 = value.GetChildAtIndex(1); '
+                    'print("SYN_LIST_CHILDREN", value.GetNumChildren()); '
+                    'print("SYN_LIST_CHILD0", child0.GetName(), child0.GetChildMemberWithName("value").GetValue()); '
+                    'print("SYN_LIST_CHILD1", child1.GetName(), child1.GetChildMemberWithName("value").GetValue())'
+                )
+            ]
+        )
+
+        self.assertIn("SYN_LIST_CHILDREN 3", output)
+        self.assertIn("SYN_LIST_CHILD0 [0] 10", output)
+        self.assertIn("SYN_LIST_CHILD1 [1] 20", output)
+
+    def test_tree_synthetic_children_follow_configured_traversal_in_real_lldb(self):
+        output = self._run_commands(
+            [
+                "formatter_config tree_traversal_strategy inorder",
+                (
+                    'script frame = lldb.debugger.GetSelectedTarget().GetProcess().'
+                    'GetSelectedThread().GetSelectedFrame(); '
+                    'value = frame.FindVariable("my_tree").GetSyntheticValue(); '
+                    'child0 = value.GetChildAtIndex(0); child1 = value.GetChildAtIndex(1); child2 = value.GetChildAtIndex(2); '
+                    'print("SYN_TREE_CHILDREN", value.GetNumChildren()); '
+                    'print("SYN_TREE_VALUES", '
+                    'child0.GetChildMemberWithName("value").GetValue(), '
+                    'child1.GetChildMemberWithName("value").GetValue(), '
+                    'child2.GetChildMemberWithName("value").GetValue())'
+                ),
+            ]
+        )
+
+        self.assertIn("Set tree_traversal_strategy -> 'inorder'", output)
+        self.assertIn("SYN_TREE_CHILDREN 3", output)
+        self.assertIn("SYN_TREE_VALUES 1 2 3", output)
+
     def test_string_payload_list_summary_uses_real_lldb_values(self):
         output = self._run_commands(["frame variable my_string_list"])
 

@@ -25,6 +25,9 @@ class MockSBValue:
         name="value",
         type_name="MockType",
         pointee=None,
+        address=None,
+        address_map=None,
+        valid=True,
     ):
         self._value = value
         self._children = children if children else {}
@@ -32,6 +35,9 @@ class MockSBValue:
         self._name = name
         self._type_name = type_name
         self._pointee = pointee
+        self._address = address if address is not None else id(self)
+        self._address_map = address_map or {}
+        self._valid = valid
 
         # ----- Mock for the SBType object ----- #
         self._type_mock = Mock()
@@ -48,7 +54,7 @@ class MockSBValue:
 
         # ----- Mock for the SBAddress object ----- #
         self._addr_mock = Mock()
-        self._addr_mock.GetFileAddress.return_value = id(self)
+        self._addr_mock.GetFileAddress.return_value = self._address
 
     def GetChildMemberWithName(self, name):
         return self._children.get(name)
@@ -75,7 +81,7 @@ class MockSBValue:
         return str(self._value)
 
     def IsValid(self):
-        return True
+        return self._valid
 
     def GetType(self):
         # This is now a method, as required by the LLDB API.
@@ -104,6 +110,22 @@ class MockSBValue:
 
     def MightHaveChildren(self):
         return bool(self._children)
+
+    def CreateValueFromAddress(self, name, address, type_obj):
+        target = self._address_map.get(address)
+        if not target:
+            return None
+        return MockSBValue(
+            value=target._value,
+            children=target._children,
+            is_pointer=target._is_pointer,
+            name=name,
+            type_name=target._type_name,
+            pointee=target._pointee,
+            address=address,
+            address_map=getattr(target, "_address_map", None),
+            valid=target._valid,
+        )
 
 
 class MockSBValueContainer(MockSBValue):

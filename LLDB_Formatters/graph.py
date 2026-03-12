@@ -31,6 +31,7 @@ from .schema_adapters import (
     resolve_graph_container_schema,
     resolve_graph_node_schema,
 )
+from .synthetic_support import parse_synthetic_child_index
 
 # -------------- Formatter for Graphs (Synthetic Children) -------------- #
 
@@ -50,8 +51,7 @@ class GraphProvider:
 
     def update(self):
         """Finds the container of nodes within the graph object."""
-        if not self.nodes_container:
-            self.nodes_container = resolve_graph_container_schema(self.valobj).nodes_container
+        self.nodes_container = resolve_graph_container_schema(self.valobj).nodes_container
 
     def num_children(self):
         """Returns the number of nodes to display as children."""
@@ -66,6 +66,9 @@ class GraphProvider:
         if self.nodes_container:
             return self.nodes_container.GetChildAtIndex(index)
         return None
+
+    def get_child_index(self, name):
+        return parse_synthetic_child_index(name)
 
     def get_summary(self):
         """

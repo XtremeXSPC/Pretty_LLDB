@@ -19,12 +19,75 @@ from .helpers import (
     Colors,
     SUMMARY_CYCLE_MARKER,
     SUMMARY_TRUNCATION_MARKER,
+    _safe_get_node_from_pointer,
     g_config,
     get_raw_pointer,
     get_value_summary,
     should_use_colors,
 )
-from .registry import register_summary
+from .registry import register_summary, register_synthetic
+from .schema_adapters import get_resolved_child, resolve_linear_container_schema, resolve_linear_node_schema
+from .synthetic_support import create_synthetic_child, parse_synthetic_child_index
+
+
+@register_synthetic(r"^(Custom|My)?(Linked)?List<.*>$")
+@register_synthetic(r"^(Custom|My)?Stack<.*>$")
+@register_synthetic(r"^(Custom|My)?Queue<.*>$")
+class LinearProvider:
+    def __init__(self, valobj, internal_dict):
+        self.valobj = valobj
+        self.children = []
+
+    def update(self):
+        self.children = []
+
+        current_ptr = resolve_linear_container_schema(self.valobj).head_ptr
+        if not current_ptr or get_raw_pointer(current_ptr) == 0:
+            return
+
+        first_node = _safe_get_node_from_pointer(current_ptr)
+        if not first_node or not first_node.IsValid():
+            return
+
+        next_field = resolve_linear_node_schema(first_node).next_field
+        if not next_field:
+            return
+
+        visited_addrs = set()
+        while current_ptr and get_raw_pointer(current_ptr) != 0:
+            if len(self.children) >= g_config.synthetic_max_children:
+                break
+
+            node_addr = get_raw_pointer(current_ptr)
+            if node_addr in visited_addrs:
+                break
+            visited_addrs.add(node_addr)
+
+            node = _safe_get_node_from_pointer(current_ptr)
+            if not node or not node.IsValid():
+                break
+
+            child = create_synthetic_child(self.valobj, f"[{len(self.children)}]", node_addr, node)
+            if child:
+                self.children.append(child)
+
+            next_child = get_resolved_child(node, next_field)
+            if not next_child:
+                break
+            current_ptr = next_child
+
+    def num_children(self):
+        self.update()
+        return len(self.children)
+
+    def get_child_at_index(self, index):
+        self.update()
+        if 0 <= index < len(self.children):
+            return self.children[index]
+        return None
+
+    def get_child_index(self, name):
+        return parse_synthetic_child_index(name)
 
 
 @register_summary(r"^(Custom|My)?(Linked)?List<.*>$")
