@@ -63,10 +63,10 @@ class TestLLDBIntegration(unittest.TestCase):
         output = self._run_commands(
             [
                 (
-                    'script frame = lldb.debugger.GetSelectedTarget().GetProcess().'
-                    'GetSelectedThread().GetSelectedFrame(); '
+                    "script frame = lldb.debugger.GetSelectedTarget().GetProcess()."
+                    "GetSelectedThread().GetSelectedFrame(); "
                     'value = frame.FindVariable("my_list").GetSyntheticValue(); '
-                    'child0 = value.GetChildAtIndex(0); child1 = value.GetChildAtIndex(1); '
+                    "child0 = value.GetChildAtIndex(0); child1 = value.GetChildAtIndex(1); "
                     'print("SYN_LIST_CHILDREN", value.GetNumChildren()); '
                     'print("SYN_LIST_CHILD0", child0.GetName(), child0.GetChildMemberWithName("value").GetValue()); '
                     'print("SYN_LIST_CHILD1", child1.GetName(), child1.GetChildMemberWithName("value").GetValue())'
@@ -83,10 +83,10 @@ class TestLLDBIntegration(unittest.TestCase):
             [
                 "formatter_config tree_traversal_strategy inorder",
                 (
-                    'script frame = lldb.debugger.GetSelectedTarget().GetProcess().'
-                    'GetSelectedThread().GetSelectedFrame(); '
+                    "script frame = lldb.debugger.GetSelectedTarget().GetProcess()."
+                    "GetSelectedThread().GetSelectedFrame(); "
                     'value = frame.FindVariable("my_tree").GetSyntheticValue(); '
-                    'child0 = value.GetChildAtIndex(0); child1 = value.GetChildAtIndex(1); child2 = value.GetChildAtIndex(2); '
+                    "child0 = value.GetChildAtIndex(0); child1 = value.GetChildAtIndex(1); child2 = value.GetChildAtIndex(2); "
                     'print("SYN_TREE_CHILDREN", value.GetNumChildren()); '
                     'print("SYN_TREE_VALUES", '
                     'child0.GetChildMemberWithName("value").GetValue(), '

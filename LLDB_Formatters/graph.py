@@ -21,8 +21,8 @@ from .command_helpers import (
 )
 from .extraction import extract_graph_structure
 from .helpers import (
-    Colors,
     SUMMARY_TRUNCATION_MARKER,
+    Colors,
     g_config,
     get_value_summary,
 )

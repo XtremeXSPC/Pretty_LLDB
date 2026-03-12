@@ -25,9 +25,9 @@ from .command_helpers import (
 )
 from .extraction import extract_tree_structure
 from .helpers import (
-    Colors,
     SUMMARY_CYCLE_MARKER,
     SUMMARY_TRUNCATION_MARKER,
+    Colors,
     _safe_get_node_from_pointer,
     g_config,
     get_raw_pointer,

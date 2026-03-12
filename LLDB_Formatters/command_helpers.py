@@ -1,6 +1,5 @@
 import shlex
 
-
 INVALID_EXECUTION_CONTEXT_ERROR = "Cannot execute command: no selected frame."
 
 

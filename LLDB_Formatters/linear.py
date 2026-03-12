@@ -16,9 +16,9 @@
 from .abi_layouts import resolve_vector_storage_layout
 from .extraction import extract_linear_structure
 from .helpers import (
-    Colors,
     SUMMARY_CYCLE_MARKER,
     SUMMARY_TRUNCATION_MARKER,
+    Colors,
     _safe_get_node_from_pointer,
     g_config,
     get_raw_pointer,
@@ -26,7 +26,11 @@ from .helpers import (
     should_use_colors,
 )
 from .registry import register_summary, register_synthetic
-from .schema_adapters import get_resolved_child, resolve_linear_container_schema, resolve_linear_node_schema
+from .schema_adapters import (
+    get_resolved_child,
+    resolve_linear_container_schema,
+    resolve_linear_node_schema,
+)
 from .summary_contract import append_incomplete_marker, unsupported_layout_summary
 from .synthetic_support import create_synthetic_child, parse_synthetic_child_index
 

@@ -148,7 +148,9 @@ class TestSyntheticProviders(unittest.TestCase):
             g_config.tree_traversal_strategy = "preorder"
             preorder_provider = TreeProvider(tree_value, {})
             preorder_values = [
-                preorder_provider.get_child_at_index(index).GetChildMemberWithName("value").GetSummary()
+                preorder_provider.get_child_at_index(index)
+                .GetChildMemberWithName("value")
+                .GetSummary()
                 for index in range(preorder_provider.num_children())
             ]
             self.assertEqual(preorder_values, ["2", "1", "3"])
@@ -156,7 +158,9 @@ class TestSyntheticProviders(unittest.TestCase):
             g_config.tree_traversal_strategy = "inorder"
             inorder_provider = TreeProvider(tree_value, {})
             inorder_values = [
-                inorder_provider.get_child_at_index(index).GetChildMemberWithName("value").GetSummary()
+                inorder_provider.get_child_at_index(index)
+                .GetChildMemberWithName("value")
+                .GetSummary()
                 for index in range(inorder_provider.num_children())
             ]
             self.assertEqual(inorder_values, ["1", "2", "3"])

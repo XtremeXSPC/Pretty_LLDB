@@ -25,7 +25,9 @@ class MockResult:
         self.error = error
 
 
-def _make_debugger(frame_valid=True, values=None, target_valid=True, process_valid=True, thread_valid=True):
+def _make_debugger(
+    frame_valid=True, values=None, target_valid=True, process_valid=True, thread_valid=True
+):
     if values is None:
         values = {}
 

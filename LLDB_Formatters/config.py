@@ -88,7 +88,9 @@ def _parse_non_negative_int(value_str):
     try:
         value = int(value_str)
     except ValueError as error:
-        raise ValueError(f"Invalid value '{value_str}'. Expected a non-negative integer.") from error
+        raise ValueError(
+            f"Invalid value '{value_str}'. Expected a non-negative integer."
+        ) from error
 
     if value < 0:
         raise ValueError(f"Invalid value '{value_str}'. Expected a non-negative integer.")

@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from .command_helpers import resolve_command_variable
 from .extraction import (
     ExtractedGraphStructure,

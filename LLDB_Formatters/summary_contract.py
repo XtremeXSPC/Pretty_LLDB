@@ -14,7 +14,9 @@ def structure_label(structure_kind):
 
 
 def unsupported_layout_summary(structure_kind, diagnostics_suffix=""):
-    return f"{structure_label(structure_kind)} {SUMMARY_UNSUPPORTED_LAYOUT_MARKER}{diagnostics_suffix}"
+    return (
+        f"{structure_label(structure_kind)} {SUMMARY_UNSUPPORTED_LAYOUT_MARKER}{diagnostics_suffix}"
+    )
 
 
 def hidden_warning_codes(extraction, visible_warning_codes=()):
@@ -23,9 +25,7 @@ def hidden_warning_codes(extraction, visible_warning_codes=()):
 
     visible = set(visible_warning_codes)
     return [
-        warning.code
-        for warning in extraction.diagnostics.warnings
-        if warning.code not in visible
+        warning.code for warning in extraction.diagnostics.warnings if warning.code not in visible
     ]
 
 
