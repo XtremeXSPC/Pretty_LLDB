@@ -26,7 +26,6 @@ def _sorted_graph_edges(extracted_graph):
 
 
 def build_list_renderer_payload(extracted_list):
-    node_addresses = {node.address for node in extracted_list.nodes}
     seen_addresses = set()
     nodes_data = []
     edges_data = []
@@ -45,14 +44,26 @@ def build_list_renderer_payload(extracted_list):
 
         if node.next_address != 0:
             target_id = _hex_address(node.next_address)
+            is_cycle_edge = node.next_address in seen_addresses
             edges_data.append(
                 {
                     "from": node_id,
                     "to": target_id,
                     "arrows": "to",
-                    "kind": "next",
-                    "is_cycle_edge": node.next_address in seen_addresses,
-                    "is_visible_target": node.next_address in node_addresses,
+                    "kind": "cycle" if is_cycle_edge else "next",
+                    "is_cycle_edge": is_cycle_edge,
+                }
+            )
+
+        if extracted_list.is_doubly_linked and index > 0:
+            prev_node = extracted_list.nodes[index - 1]
+            edges_data.append(
+                {
+                    "from": node_id,
+                    "to": _hex_address(prev_node.address),
+                    "arrows": "to",
+                    "kind": "prev",
+                    "is_cycle_edge": False,
                 }
             )
 
@@ -119,7 +130,14 @@ def build_graph_renderer_payload(extracted_graph, directed=True):
         )
 
     edges_data = []
+    seen_undirected_edges = set()
     for edge in _sorted_graph_edges(extracted_graph):
+        if not directed:
+            undirected_key = tuple(sorted((edge.source, edge.target)))
+            if undirected_key in seen_undirected_edges:
+                continue
+            seen_undirected_edges.add(undirected_key)
+
         edge_data = {
             "from": _hex_address(edge.source),
             "to": _hex_address(edge.target),
@@ -133,7 +151,7 @@ def build_graph_renderer_payload(extracted_graph, directed=True):
         "nodes_data": nodes_data,
         "edges_data": edges_data,
         "num_nodes": extracted_graph.num_nodes,
-        "num_edges": extracted_graph.num_edges,
+        "num_edges": len(edges_data) if not directed else extracted_graph.num_edges,
         "directed": directed,
     }
 

@@ -35,6 +35,7 @@ from .schema_adapters import (
 )
 from .summary_contract import append_incomplete_marker, unsupported_layout_summary
 from .synthetic_support import parse_synthetic_child_index
+from .visualization_options import parse_graph_export_arguments
 
 # -------------- Formatter for Graphs (Synthetic Children) -------------- #
 
@@ -156,14 +157,18 @@ def export_graph_command(debugger, command, result, internal_dict):
         command,
         result,
         "export_graph",
-        "<variable> [file.dot]",
+        "<variable> [file.dot] [directed|undirected]",
         min_args=1,
     )
     if not args or not frame:
         return
 
     var_name = args[0]
-    output_filename = args[1] if len(args) > 1 else "graph.dot"
+    try:
+        output_filename, directed = parse_graph_export_arguments(args)
+    except ValueError as error:
+        result.SetError(str(error))
+        return
 
     graph_val = find_variable(frame, var_name, result)
     if not graph_val:
@@ -177,12 +182,13 @@ def export_graph_command(debugger, command, result, internal_dict):
         result.AppendMessage(empty_structure_message("graph"))
         return
 
-    dot_content = render_graph_dot(extracted_graph, directed=True)
+    dot_content = render_graph_dot(extracted_graph, directed=directed)
+    mode_label = "directed" if directed else "undirected"
 
     try:
         with open(output_filename, "w") as f:
             f.write(dot_content)
-        result.AppendMessage(f"Successfully exported graph to '{output_filename}'.")
+        result.AppendMessage(f"Successfully exported {mode_label} graph to '{output_filename}'.")
         result.AppendMessage(f"Run: dot -Tpng {output_filename} -o graph.png")
     except IOError as e:
         result.SetError(f"Failed to write to file '{output_filename}': {e}")

@@ -39,6 +39,38 @@ class TestRenderers(unittest.TestCase):
             [edge["is_cycle_edge"] for edge in payload["edges_data"]],
             [False, False, True],
         )
+        self.assertEqual(
+            [edge["kind"] for edge in payload["edges_data"]],
+            ["next", "next", "cycle"],
+        )
+
+    def test_build_list_renderer_payload_adds_backward_edges_for_doubly_linked_lists(self):
+        extracted_list = ExtractedLinearStructure(
+            size=3,
+            is_doubly_linked=True,
+            nodes=[
+                LinearNode(address=0x10, value="10", next_address=0x20),
+                LinearNode(address=0x20, value="20", next_address=0x30),
+                LinearNode(address=0x30, value="30", next_address=0),
+            ],
+        )
+
+        payload = build_list_renderer_payload(extracted_list)
+
+        self.assertEqual(
+            [edge["kind"] for edge in payload["edges_data"]],
+            ["next", "next", "prev", "prev"],
+        )
+        self.assertEqual(
+            payload["edges_data"][-1],
+            {
+                "from": "0x30",
+                "to": "0x20",
+                "arrows": "to",
+                "kind": "prev",
+                "is_cycle_edge": False,
+            },
+        )
 
     def test_build_tree_renderer_payload_is_deterministic(self):
         extracted_tree = ExtractedTreeStructure(
@@ -74,12 +106,15 @@ class TestRenderers(unittest.TestCase):
     def test_build_graph_renderer_payload_can_be_undirected(self):
         extracted_graph = ExtractedGraphStructure(
             num_nodes=2,
-            num_edges=1,
+            num_edges=2,
             nodes=[
                 GraphNode(address=0x20, value="b"),
                 GraphNode(address=0x10, value="a"),
             ],
-            edges=[GraphEdge(source=0x20, target=0x10)],
+            edges=[
+                GraphEdge(source=0x20, target=0x10),
+                GraphEdge(source=0x10, target=0x20),
+            ],
         )
 
         payload = build_graph_renderer_payload(extracted_graph, directed=False)
@@ -89,6 +124,8 @@ class TestRenderers(unittest.TestCase):
             [node["address"] for node in payload["nodes_data"]],
             ["0x10", "0x20"],
         )
+        self.assertEqual(payload["num_edges"], 1)
+        self.assertEqual(len(payload["edges_data"]), 1)
         self.assertNotIn("arrows", payload["edges_data"][0])
 
     def test_render_graph_dot_escapes_labels_and_sorts_output(self):
@@ -109,6 +146,26 @@ class TestRenderers(unittest.TestCase):
         self.assertIn('Node_0x20 [label="b \\"quoted\\""];', dot)
         self.assertLess(dot.index('Node_0x10 [label="a\\\\path\\nline"];'), dot.index('Node_0x20 [label="b \\"quoted\\""];'))
         self.assertIn("Node_0x20 -> Node_0x10;", dot)
+
+    def test_render_graph_dot_uses_undirected_edges_when_requested(self):
+        extracted_graph = ExtractedGraphStructure(
+            num_nodes=2,
+            num_edges=2,
+            nodes=[
+                GraphNode(address=0x20, value="b"),
+                GraphNode(address=0x10, value="a"),
+            ],
+            edges=[
+                GraphEdge(source=0x20, target=0x10),
+                GraphEdge(source=0x10, target=0x20),
+            ],
+        )
+
+        dot = render_graph_dot(extracted_graph, directed=False)
+
+        self.assertIn("graph Graph {", dot)
+        self.assertIn("Node_0x10 -- Node_0x20;", dot)
+        self.assertNotIn("->", dot)
 
     def test_render_tree_dot_annotates_traversal_order(self):
         extracted_tree = ExtractedTreeStructure(

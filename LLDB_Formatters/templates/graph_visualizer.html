@@ -153,6 +153,7 @@
       // ----- Data from Python ----- //
       const rawNodesData = __NODES_DATA__;
       const rawEdgesData = __EDGES_DATA__;
+      const isDirected = __GRAPH_DIRECTED__;
 
       // ----- Vis.js Setup ----- //
       let network;
@@ -166,8 +167,14 @@
         originalData: node,
       }));
 
+      const processedEdges = rawEdgesData.map((edge) => ({
+        ...edge,
+        arrows: edge.directed ? { to: { enabled: true, scaleFactor: 1 } } : {},
+        smooth: edge.directed ? { type: "dynamic" } : false,
+      }));
+
       const nodes = new vis.DataSet(processedNodes);
-      const edges = new vis.DataSet(rawEdgesData);
+      const edges = new vis.DataSet(processedEdges);
       const data = { nodes: nodes, edges: edges };
       const container = document.getElementById("mynetwork");
 
@@ -253,7 +260,7 @@
           },
         },
         edges: {
-          arrows: { to: { enabled: true, scaleFactor: 1 } },
+          arrows: isDirected ? { to: { enabled: true, scaleFactor: 1 } } : {},
           width: 2,
           color: {
             color: colorPalette.edgeDefault,
@@ -401,7 +408,7 @@
         const edgeCount = edges.length;
         const avgDegree =
           nodeCount > 0 ? ((2 * edgeCount) / nodeCount).toFixed(2) : 0;
-        statsDiv.innerHTML = `<strong>Nodes:</strong> ${nodeCount}<br><strong>Edges:</strong> ${edgeCount}<br><strong>Avg. Degree:</strong> ${avgDegree}<br><strong>Layout:</strong> ${currentLayout}`;
+        statsDiv.innerHTML = `<strong>Nodes:</strong> ${nodeCount}<br><strong>Edges:</strong> ${edgeCount}<br><strong>Avg. Degree:</strong> ${avgDegree}<br><strong>Mode:</strong> ${isDirected ? "Directed" : "Undirected"}<br><strong>Layout:</strong> ${currentLayout}`;
       }
 
       /**
@@ -411,6 +418,7 @@
         const graphData = {
           nodes: nodes.get(),
           edges: edges.get(),
+          directed: isDirected,
           layout: currentLayout,
           timestamp: new Date().toISOString(),
         };

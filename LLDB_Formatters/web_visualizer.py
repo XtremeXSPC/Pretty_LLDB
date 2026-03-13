@@ -45,6 +45,7 @@ from .renderers import (
     build_list_renderer_payload,
     build_tree_renderer_payload,
 )
+from .visualization_options import parse_graph_render_mode
 
 # ----------------------------------------------------------------------- #
 # SECTION 1: PRIVATE HELPER FUNCTIONS
@@ -93,7 +94,7 @@ def _build_visjs_data_for_list(valobj):
     return build_list_renderer_payload(extracted_list)
 
 
-def _build_visjs_data_for_graph(valobj):
+def _build_visjs_data_for_graph(valobj, directed=True):
     """
     Traverses a graph SBValue and returns all data needed for its
     vis.js visualization in a dictionary.
@@ -102,7 +103,7 @@ def _build_visjs_data_for_graph(valobj):
     extracted_graph = extract_graph_structure(valobj)
     if extracted_graph.is_empty or extracted_graph.error_message:
         return None
-    return build_graph_renderer_payload(extracted_graph, directed=True)
+    return build_graph_renderer_payload(extracted_graph, directed=directed)
 
 
 # ----------------------------------------------------------------------- #
@@ -159,6 +160,7 @@ def generate_list_visualization_html(valobj):
         "__EDGES_DATA__": json.dumps(list_data["edges_data"]),
         "__TRAVERSAL_ORDER_DATA__": json.dumps(list_data["traversal_order"]),
         "__IS_DOUBLY_LINKED__": json.dumps(list_data["is_doubly_linked"]),
+        "__CYCLE_DETECTED__": json.dumps(list_data["cycle_detected"]),
         "__TYPE_INFO_HTML__": info_html,
     }
     return _generate_html("list_visualizer.html", template_data)
@@ -195,7 +197,7 @@ def generate_tree_visualization_html(valobj):
     return _generate_html("tree_visualizer.html", template_data)
 
 
-def generate_graph_visualization_html(valobj):
+def generate_graph_visualization_html(valobj, directed=True):
     """
     Takes a graph SBValue and returns a complete, self-contained HTML string
     for its visualization. Returns None if data generation fails.
@@ -204,7 +206,7 @@ def generate_graph_visualization_html(valobj):
     if extracted_graph.is_empty or extracted_graph.error_message:
         return None
 
-    graph_data = _build_visjs_data_for_graph(valobj)
+    graph_data = _build_visjs_data_for_graph(valobj, directed=directed)
     if not graph_data:
         return None
 
@@ -213,7 +215,8 @@ def generate_graph_visualization_html(valobj):
         "Variable Name": valobj.GetName(),
         "Type Name": valobj.GetTypeName(),
         "Nodes (V)": extracted_graph.num_nodes,
-        "Edges (E)": extracted_graph.num_edges,
+        "Edges (E)": graph_data["num_edges"],
+        "Mode": "Directed" if graph_data["directed"] else "Undirected",
     }
     info_html = "<h3>Graph Information</h3><table>"
     for key, value in info.items():
@@ -223,6 +226,7 @@ def generate_graph_visualization_html(valobj):
     template_data = {
         "__NODES_DATA__": json.dumps(graph_data["nodes_data"]),
         "__EDGES_DATA__": json.dumps(graph_data["edges_data"]),
+        "__GRAPH_DIRECTED__": json.dumps(graph_data["directed"]),
         "__TYPE_INFO_HTML__": info_html,  # Pass the full HTML block
     }
     return _generate_html("graph_visualizer.html", template_data)
@@ -319,16 +323,23 @@ def export_tree_web_command(debugger, command, result, internal_dict):
 
 def export_graph_web_command(debugger, command, result, internal_dict):
     """Implements the 'webgraph' command."""
-    _, var_name, valobj = resolve_command_variable(
+    args, var_name, valobj = resolve_command_variable(
         debugger,
         command,
         result,
         "webgraph",
+        "<variable> [directed|undirected]",
     )
     if not valobj:
+        return
+    mode_token = args[1] if len(args) > 1 else None
+    try:
+        directed = parse_graph_render_mode(mode_token)
+    except ValueError as error:
+        result.SetError(str(error))
         return
     extraction = extract_graph_structure(valobj)
     if not _validate_visualizable_structure(result, "graph", extraction):
         return
-    html_content = generate_graph_visualization_html(valobj)
+    html_content = generate_graph_visualization_html(valobj, directed=directed)
     _display_html_content(html_content, var_name, result)

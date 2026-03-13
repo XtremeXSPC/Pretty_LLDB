@@ -185,6 +185,7 @@
       const rawEdgesData = __EDGES_DATA__;
       const traversalOrder = __TRAVERSAL_ORDER_DATA__;
       const isDoublyLinked = __IS_DOUBLY_LINKED__;
+      const cycleDetected = __CYCLE_DETECTED__;
 
       // ----- Vis.js & Animation State Setup ----- //
       let network;
@@ -203,10 +204,34 @@
         label: String(node.value || node.label),
         address: `${node.address || node.id}`,
       }));
-      const processedEdges = rawEdgesData.map((edge) => ({
-        ...edge,
-        arrows: { to: { enabled: true }, from: { enabled: isDoublyLinked } },
-      }));
+      const processedEdges = rawEdgesData.map((edge) => {
+        const isPrev = edge.kind === "prev";
+        const isCycle = edge.kind === "cycle";
+        return {
+          ...edge,
+          arrows: { to: { enabled: true, scaleFactor: isPrev ? 0.75 : 1 } },
+          dashes: isPrev,
+          width: isCycle ? 3 : 2,
+          color: {
+            color: isCycle
+              ? colorPalette.red
+              : isPrev
+              ? colorPalette.edgeSelected
+              : colorPalette.edgeDefault,
+            highlight: isCycle
+              ? colorPalette.red
+              : isPrev
+              ? colorPalette.edgeSelected
+              : colorPalette.edgeSelected,
+            inherit: false,
+          },
+          smooth: isCycle
+            ? { type: "curvedCW", roundness: 0.35 }
+            : isPrev
+            ? { type: "curvedCCW", roundness: 0.2 }
+            : false,
+        };
+      });
 
       const nodes = new vis.DataSet(processedNodes);
       const edges = new vis.DataSet(processedEdges);
@@ -552,7 +577,13 @@
         const statsDiv = document.getElementById("list-stats");
         const nodeCount = nodes.length;
         const listType = isDoublyLinked ? "Doubly Linked" : "Singly Linked";
-        statsDiv.innerHTML = `<strong>Nodes:</strong> ${nodeCount}<br><strong>Type:</strong> ${listType}<br><strong>Layout:</strong> ${currentLayout}`;
+        const nextEdges = rawEdgesData.filter((edge) => edge.kind === "next")
+          .length;
+        const prevEdges = rawEdgesData.filter((edge) => edge.kind === "prev")
+          .length;
+        const cycleEdges = rawEdgesData.filter((edge) => edge.kind === "cycle")
+          .length;
+        statsDiv.innerHTML = `<strong>Nodes:</strong> ${nodeCount}<br><strong>Type:</strong> ${listType}<br><strong>Forward Edges:</strong> ${nextEdges}<br><strong>Backward Edges:</strong> ${prevEdges}<br><strong>Cycle:</strong> ${cycleDetected ? "Yes" : "No"}${cycleEdges ? ` (${cycleEdges} edge)` : ""}<br><strong>Layout:</strong> ${currentLayout}`;
       }
 
       /**
@@ -564,6 +595,7 @@
           edges: edges.get(),
           traversalOrder: traversalOrder,
           isDoublyLinked: isDoublyLinked,
+          cycleDetected: cycleDetected,
           layout: currentLayout,
           timestamp: new Date().toISOString(),
         };

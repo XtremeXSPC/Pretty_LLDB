@@ -58,7 +58,7 @@ def formatter_help_command(debugger, command, result, internal_dict):
 
 {C_CMD}File Exporters (Graphviz .dot):{C_RST}
   export_tree [{C_ARG}<variable> [file.dot] [order]{C_RST}]
-  export_graph [{C_ARG}<variable> [file.dot]{C_RST}]
+  export_graph [{C_ARG}<variable> [file.dot] [directed|undirected]{C_RST}]
 
 {C_CMD}Interactive Web Visualizers:{C_RST}
   weblist [{C_ARG}<variable>{C_RST}]
@@ -67,7 +67,7 @@ def formatter_help_command(debugger, command, result, internal_dict):
   webtree [{C_ARG}<variable>{C_RST}]
     - Opens an interactive tree visualization in your web browser.
 
-  webgraph [{C_ARG}<variable>{C_RST}] (alias: `webg`)
+  webgraph [{C_ARG}<variable> [directed|undirected]{C_RST}] (alias: `webg`)
     - Opens an interactive graph visualization in your web browser.
 
 {C_CMD}Help:{C_RST}

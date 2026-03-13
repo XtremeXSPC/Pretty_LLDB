@@ -65,14 +65,35 @@ class TestCommandUX(unittest.TestCase):
 
         export_graph_command(_make_debugger(), "", result, {})
 
-        self.assertEqual(result.error, "Usage: export_graph <variable> [file.dot]")
+        self.assertEqual(result.error, "Usage: export_graph <variable> [file.dot] [directed|undirected]")
 
     def test_webgraph_usage_is_specific(self):
         result = MockResult()
 
         export_graph_web_command(_make_debugger(), "", result, {})
 
-        self.assertEqual(result.error, "Usage: webgraph <variable>")
+        self.assertEqual(result.error, "Usage: webgraph <variable> [directed|undirected]")
+
+    def test_graph_commands_validate_mode_argument(self):
+        graph_value = MockSBValue(
+            children={
+                "nodes": MockSBValueContainer([]),
+                "num_nodes": MockSBValue(0),
+                "num_edges": MockSBValue(0),
+            },
+            name="my_graph",
+            type_name="MyGraph<int>",
+        )
+        debugger = _make_debugger(values={"my_graph": graph_value})
+
+        for command_fn, command_text in [
+            (export_graph_command, "my_graph graph.dot sideways"),
+            (export_graph_web_command, "my_graph sideways"),
+        ]:
+            with self.subTest(command=command_fn.__name__):
+                result = MockResult()
+                command_fn(debugger, command_text, result, {})
+                self.assertIn("Invalid graph mode 'sideways'.", result.error)
 
     def test_formatter_config_usage_is_normalized(self):
         result = MockResult()

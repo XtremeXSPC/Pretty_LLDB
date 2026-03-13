@@ -212,7 +212,7 @@ class TestLLDBIntegration(unittest.TestCase):
         output_file = Path(tempfile.mkdtemp(prefix="graph-export-", dir=RUNTIME_ROOT)) / "graph.dot"
         output = self._run_commands([f"export_graph my_graph {output_file}"])
 
-        self.assertIn("Successfully exported graph", output)
+        self.assertIn("Successfully exported directed graph", output)
         self.assertTrue(output_file.exists(), "Expected graph.dot to be created.")
 
         dot_content = output_file.read_text(encoding="utf-8")
@@ -220,6 +220,18 @@ class TestLLDBIntegration(unittest.TestCase):
         self.assertIn('label="20"', dot_content)
         self.assertIn('label="30"', dot_content)
         self.assertIn("->", dot_content)
+
+    def test_export_graph_command_supports_undirected_mode(self):
+        output_file = Path(tempfile.mkdtemp(prefix="graph-export-undirected-", dir=RUNTIME_ROOT)) / "graph.dot"
+        output = self._run_commands([f"export_graph my_graph {output_file} undirected"])
+
+        self.assertIn("Successfully exported undirected graph", output)
+        self.assertTrue(output_file.exists(), "Expected graph.dot to be created.")
+
+        dot_content = output_file.read_text(encoding="utf-8")
+        self.assertIn("graph Graph {", dot_content)
+        self.assertIn("--", dot_content)
+        self.assertNotIn("->", dot_content)
 
     def test_export_tree_command_creates_dot_output(self):
         output_file = Path(tempfile.mkdtemp(prefix="tree-export-", dir=RUNTIME_ROOT)) / "tree.dot"
