@@ -1,44 +1,46 @@
-/* style.css (Version 4.0 - Final UX/UI Polish) */
+/* ============= style.css — Pretty LLDB Visualizers ============== */
 
 /*
-  DESIGN TOKENS & PALETTE:
-  Defining a comprehensive set of CSS variables for a robust design system.
-  This system is based on the user-provided Tokyo Night color palette.
+  DESIGN TOKENS
+  Based on the Tokyo Night color palette.
 */
 :root {
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  --font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', 'Fira Code', Consolas, monospace;
+
+  --panel-width: 320px;
 
   /* ----- Dark Theme (Tokyo Night Storm) ----- */
-  --bg-main-dark: #24283b; /* Lighter blue for the page background */
-  --bg-surface-dark: #1a1b26; /* Deepest blue for the panel surface */
-  --bg-interactive-dark: #414868; /* Buttons, inputs */
+  --bg-main-dark: #24283b;
+  --bg-surface-dark: #1a1b26;
+  --bg-interactive-dark: #414868;
   --bg-interactive-hover-dark: #565f89;
 
   --border-color-dark: #414868;
   --separator-color-dark: #3b4261;
 
-  --text-primary-dark: #c0caf5; /* Main text */
-  --text-secondary-dark: #a9b1d6; /* Dimmed text for stats, etc. */
-  --text-comment-dark: #565f89; /* For less important text */
+  --text-primary-dark: #c0caf5;
+  --text-secondary-dark: #a9b1d6;
+  --text-comment-dark: #565f89;
 
   /* ----- Light Theme ----- */
-  --bg-main-light: #e1e2ef; /* A soft, off-white background */
-  --bg-surface-light: #fdfdfe; /* A clean, slightly off-white panel */
+  --bg-main-light: #e1e2ef;
+  --bg-surface-light: #fdfdfe;
   --bg-interactive-light: #d8dbea;
   --bg-interactive-hover-light: #c8cad9;
 
   --border-color-light: #d8dbea;
   --separator-color-light: #e9eaf4;
 
-  --text-primary-light: #343b58; /* Strong, dark blue for readability */
+  --text-primary-light: #343b58;
   --text-secondary-light: #565f89;
   --text-comment-light: #9aa5ce;
 
   /* ----- Universal Tokens ----- */
   --shadow-color: rgba(0, 0, 0, 0.3);
   --shadow-elevation-1: 0 2px 4px var(--shadow-color);
-  --shadow-elevation-2: 0 6px 15px var(--shadow-color);
+  --shadow-elevation-2: 0 6px 20px var(--shadow-color);
   --border-radius-panel: 14px;
   --border-radius-element: 8px;
 }
@@ -56,7 +58,6 @@ body {
   --text-comment: var(--text-comment-dark);
 }
 
-/* Light theme overrides */
 body.light-theme {
   --bg-main: var(--bg-main-light);
   --bg-surface: var(--bg-surface-light);
@@ -70,7 +71,8 @@ body.light-theme {
   --shadow-color: rgba(52, 59, 88, 0.1);
 }
 
-/* ----- General & InfoBox Styles ----- */
+/* ============================= BASE ============================= */
+
 html,
 body {
   font-family: var(--font-family);
@@ -93,6 +95,8 @@ body {
   z-index: 1;
 }
 
+/* ========================== INFO PANEL ========================== */
+
 #info-box {
   position: absolute;
   top: 20px;
@@ -101,25 +105,123 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-panel);
   padding: 20px;
-  z-index: 3; /* Above network */
+  z-index: 3;
   box-shadow: var(--shadow-elevation-2);
-  backdrop-filter: blur(10px);
-  max-width: 300px;
-  max-height: 90vh; /* calc(100vh - 40px) a 70vh */
+  backdrop-filter: blur(12px);
+  max-width: var(--panel-width);
+  max-height: 90vh;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: #bb9af7 transparent;
-  transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1), opacity 0.4s ease;
+  transition:
+    transform 0.35s cubic-bezier(0.2, 1, 0.2, 1),
+    opacity 0.35s ease;
   color: var(--text-primary);
 }
+
 #info-box.hidden {
   transform: translateX(calc(100% + 40px));
   opacity: 0;
   pointer-events: none;
 }
 
-/* ----- Close Button ----- */
+/* ---- Per-visualizer gradient accent bar ---- */
+.panel-accent {
+  height: 2px;
+  margin: -20px -20px 18px;
+  border-radius: calc(var(--border-radius-panel) - 1px) calc(var(--border-radius-panel) - 1px) 0 0;
+}
+.panel-accent--list {
+  background: linear-gradient(90deg, #7aa2f7 0%, #9ece6a 100%);
+}
+.panel-accent--tree {
+  background: linear-gradient(90deg, #bb9af7 0%, #7aa2f7 100%);
+}
+.panel-accent--graph {
+  background: linear-gradient(90deg, #e0af68 0%, #f7768e 100%);
+}
+
+/* ---- Panel header ---- */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+.panel-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.panel-badge--list {
+  background: rgba(122, 162, 247, 0.12);
+  color: #7aa2f7;
+  border-color: rgba(122, 162, 247, 0.35);
+}
+.panel-badge--tree {
+  background: rgba(187, 154, 247, 0.12);
+  color: #bb9af7;
+  border-color: rgba(187, 154, 247, 0.35);
+}
+.panel-badge--graph {
+  background: rgba(224, 175, 104, 0.12);
+  color: #e0af68;
+  border-color: rgba(224, 175, 104, 0.35);
+}
+
+/* ----- Icon-only button inside header ----- */
+.icon-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-element);
+  background: var(--bg-interactive);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-btn:hover {
+  background: var(--bg-interactive-hover);
+  color: var(--text-primary);
+  border-color: #7aa2f7;
+}
+
+/* ======================== TOGGLE BUTTON ========================= */
+
 #toggle-info-btn {
   position: absolute;
   top: 20px;
@@ -131,8 +233,8 @@ body {
   width: 40px;
   height: 40px;
   cursor: pointer;
-  font-size: 24px;
-  z-index: 4; /* Always on top */
+  font-size: 20px;
+  z-index: 4;
   box-shadow: var(--shadow-elevation-2);
   transition: all 0.3s ease;
   display: flex;
@@ -140,55 +242,64 @@ body {
   justify-content: center;
 }
 #toggle-info-btn:hover {
-  filter: brightness(1.1);
-  transform: scale(1.05);
+  filter: brightness(1.12);
+  transform: scale(1.06);
 }
 #toggle-info-btn.info-visible {
-  /* Calculation places the button exactly 10px to the left of the panel */
-  transform: translateX(calc(-300px - 20px)); /* panel_width + right_spacing */
+  transform: translateX(calc(-1 * var(--panel-width) - 20px));
 }
 
-/* ----- UI Controls Refinement ----- */
-#info-box h3 {
-  margin: 0 0 15px 0;
-  font-size: 18px;
-  color: var(--text-primary);
-}
+/* ======================== SECTION TITLES ======================== */
+
 .section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-comment);
   margin-bottom: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
+.section-title::before {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 10px;
+  background: #7aa2f7;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* ====================== CONTROLS SECTIONS ======================= */
 
 .controls-section,
 .theme-controls {
-  margin-top: 20px;
-  padding-top: 20px;
+  margin-top: 18px;
+  padding-top: 18px;
   border-top: 1px solid var(--separator-color);
 }
 .theme-controls {
-  margin-top: 15px;
+  margin-top: 0;
   padding-top: 0;
   border-top: none;
 }
 
 .button-group {
   display: flex;
-  gap: 10px; /* Increased spacing */
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .button,
 .theme-controls button {
   flex: 1;
-  padding: 9px 12px;
+  padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: var(--border-radius-element);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   transition: all 0.2s ease;
@@ -198,7 +309,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
+  letter-spacing: 0.1px;
 }
 .button:hover,
 .theme-controls button:hover {
@@ -206,12 +318,13 @@ body {
   color: var(--text-primary);
   border-color: var(--border-color);
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px var(--shadow-color);
+  box-shadow: 0 4px 10px var(--shadow-color);
 }
 .button.active {
   background: #7aa2f7;
   color: #ffffff;
   border-color: #7aa2f7;
+  box-shadow: 0 2px 8px rgba(122, 162, 247, 0.35);
 }
 
 .animation-controls {
@@ -221,10 +334,11 @@ body {
 }
 .play-button {
   width: 100%;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   background: #9ece6a;
-  color: #1a1b26; /* Force dark text for high contrast */
+  color: #1a1b26;
   border: none;
+  font-weight: 600;
 }
 .play-button:hover {
   background: #9ece6a;
@@ -236,9 +350,9 @@ body {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 10px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-comment);
 }
 .speed-control span:first-child {
@@ -246,69 +360,224 @@ body {
 }
 .speed-control input {
   flex-grow: 1;
+  accent-color: #7aa2f7;
 }
 
 .search-box {
   width: 100%;
-  padding: 9px 12px;
+  padding: 8px 11px;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-element);
-  font-size: 13px;
+  font-size: 12px;
   box-sizing: border-box;
   background: var(--bg-interactive);
   color: var(--text-primary);
   transition: all 0.2s ease;
+  font-family: var(--font-family);
+}
+.search-box::placeholder {
+  color: var(--text-comment);
 }
 .search-box:focus {
+  outline: none;
   border-color: #7aa2f7;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #7aa2f7 25%, transparent);
+  box-shadow: 0 0 0 3px rgba(122, 162, 247, 0.18);
 }
+
+/* ========================= STAT DISPLAY ========================= */
 
 .stats-display,
 .node-info,
 .connected-nodes,
 .legend {
-  background: var(--bg-main); /* Match main background for an inset look */
+  background: var(--bg-main);
   padding: 12px;
   border-radius: var(--border-radius-element);
-  margin: 15px 0;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.6;
+  margin: 14px 0;
   border: 1px solid var(--separator-color);
 }
 .node-info {
-  border-left: 3px solid #9ece6a;
+  border-left: 2px solid #9ece6a;
 }
 .connected-nodes {
-  border-left: 3px solid #e0af68;
+  border-left: 2px solid #e0af68;
 }
-.connected-node-item {
-  padding: 4px 0;
+
+/* Stat rows */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 5px 0;
   border-bottom: 1px solid var(--separator-color);
-  font-size: 11px;
+  gap: 10px;
 }
-.connected-node-item:last-child {
+.stat-row:last-child {
   border-bottom: none;
 }
+.stat-key {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.stat-value {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  text-align: right;
+  word-break: break-all;
+}
+
+/* ==================== MONOSPACE ADDRESS CHIP ==================== */
+
+.address-mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #9ece6a;
+  background: rgba(158, 206, 106, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(158, 206, 106, 0.2);
+  display: inline-block;
+}
+
+/* ======================= CONNECTED NODES ======================== */
+
+.rel-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-comment);
+  margin-bottom: 5px;
+}
+.connected-node-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: var(--bg-surface);
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  border: 1px solid var(--separator-color);
+  color: var(--text-secondary);
+  transition: border-color 0.15s ease;
+}
+.connected-node-item:last-child {
+  margin-bottom: 0;
+}
+.connected-node-item:hover {
+  border-color: var(--border-color);
+}
+.rel-arrow {
+  font-size: 11px;
+  color: var(--text-comment);
+  flex-shrink: 0;
+}
+
+.collapsed-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(224, 175, 104, 0.12);
+  color: #e0af68;
+  border: 1px solid rgba(224, 175, 104, 0.3);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ======================= TYPE INFO TABLE ======================== */
+
+.type-info-display h3 {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-comment);
+  margin: 0 0 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.type-info-display h3::before {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 10px;
+  background: #bb9af7;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.type-info-display table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.type-info-display th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--separator-color);
+  white-space: nowrap;
+  width: 44%;
+  vertical-align: top;
+}
+.type-info-display td {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  padding: 5px 0 5px 8px;
+  border-bottom: 1px solid var(--separator-color);
+  word-break: break-all;
+  vertical-align: top;
+}
+.type-info-display tr:last-child th,
+.type-info-display tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================ LEGEND ============================ */
+
 .legend-item {
   display: flex;
   align-items: center;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.legend-item:last-child {
+  margin-bottom: 0;
 }
 .legend-color {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
   margin-right: 8px;
+  flex-shrink: 0;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.35);
+}
+
+/* ======================== MISCELLANEOUS ========================= */
+
+.hint-text {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-comment);
+  font-style: italic;
 }
 
 .button-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
   stroke-width: 2;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  flex-shrink: 0;
 }

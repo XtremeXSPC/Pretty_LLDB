@@ -1,108 +1,95 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <title>Interactive Graph Visualizer</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pretty LLDB — Graph Visualizer</title>
     <style>
-      /* Injected styles start */
-      __SHARED_CSS__
-      /* Injected styles end */
-  
-      /* Fallback/base styles to maintain syntax highlighting */
-      body {
+      __SHARED_CSS__ body {
         padding: 0;
         margin: 0;
       }
     </style>
   </head>
   <body>
-    <!-- UI Controls -->
     <button
       id="toggle-info-btn"
       onclick="toggleInfoBox()"
-      title="Toggle Info Panel"
+      title="Show Info Panel"
+      aria-label="Toggle graph controls"
     >
-      ⚙️
+      ⚙
     </button>
 
-    <div id="info-box" class="hidden">
-      <h3>Graph Controls</h3>
+    <div id="info-box" class="hidden" role="complementary" aria-label="Graph controls">
+      <!-- Gradient accent bar -->
+      <div class="panel-accent panel-accent--graph"></div>
 
-      <div class="theme-controls">
-        <button id="theme-toggle-btn" onclick="toggleTheme()">
-          Switch to Light Theme
-        </button>
+      <!-- Header -->
+      <div class="panel-header">
+        <div class="panel-header-left">
+          <span class="panel-title">Graph Visualizer</span>
+          <span class="panel-badge panel-badge--graph">GRAPH</span>
+        </div>
+        <button id="theme-toggle-btn" class="icon-btn" onclick="toggleTheme()"></button>
       </div>
 
-      <div class="stats-display type-info-display">
-        __TYPE_INFO_HTML__
-      </div>
+      <!-- Type info injected by Python -->
+      <div class="stats-display type-info-display">__TYPE_INFO_HTML__</div>
 
       <!-- View Operations -->
       <div class="controls-section">
-        <div class="section-title">View Operations</div>
+        <div class="section-title">View</div>
         <div class="button-group">
-          <button id="btn-center" class="button" onclick="centerView()">
-            Center
-          </button>
-          <button id="btn-clear" class="button" onclick="clearSelection()">
-            Clear
-          </button>
+          <button id="btn-center" class="button" onclick="centerView()">Center</button>
+          <button id="btn-clear" class="button" onclick="clearSelection()">Clear</button>
         </div>
       </div>
 
-      <!-- Layout Controls -->
+      <!-- Layout -->
       <div class="controls-section layout-controls">
         <div class="section-title">Layout</div>
         <div class="button-group">
-          <button
-            class="button active"
-            onclick="setLayout('physics')"
-            id="physics-btn"
-          >
+          <button class="button active" onclick="setLayout('physics')" id="physics-btn">
             Physics
           </button>
-          <button
-            class="button"
-            onclick="setLayout('hierarchical')"
-            id="hierarchical-btn"
-          >
+          <button class="button" onclick="setLayout('hierarchical')" id="hierarchical-btn">
             Hierarchical
           </button>
-          <button class="button" onclick="setLayout('radial')" id="radial-btn">
-            Radial
-          </button>
+          <button class="button" onclick="setLayout('radial')" id="radial-btn">Radial</button>
         </div>
       </div>
 
-      <!-- Search Controls -->
+      <!-- Search -->
       <div class="controls-section search-controls">
-        <div class="section-title">Search & Highlight</div>
+        <div class="section-title">Search</div>
         <input
           type="text"
           class="search-box"
           id="search-input"
-          placeholder="Search node values..."
+          placeholder="Search node values…"
+          autocomplete="off"
+          spellcheck="false"
           oninput="searchNodes(this.value)"
         />
         <div class="button-group" style="margin-top: 8px">
-          <button class="button" onclick="clearHighlights()">
-            Clear Search
-          </button>
+          <button class="button" onclick="clearHighlights()">Clear Search</button>
         </div>
       </div>
 
-      <!-- Statistics and Node Info -->
+      <!-- Statistics -->
       <div class="stats-display" id="stats-display">
-        <div class="section-title">Graph Statistics</div>
+        <div class="section-title">Statistics</div>
         <div id="graph-stats"></div>
       </div>
 
+      <!-- Selected node info -->
       <div class="node-info" id="node-info" style="display: none">
         <div class="section-title">Selected Node</div>
         <div id="node-details"></div>
       </div>
 
-      <!-- Connected Nodes Section -->
+      <!-- Connected Nodes -->
       <div class="connected-nodes" id="connected-nodes" style="display: none">
         <div class="section-title">Connected Nodes</div>
         <div id="connected-list"></div>
@@ -112,45 +99,40 @@
       <div class="legend">
         <div class="section-title">Legend</div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #7aa2f7"></div>
+          <div class="legend-color" style="background: #7aa2f7"></div>
           <span>Normal</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #bb9af7"></div>
+          <div class="legend-color" style="background: #bb9af7"></div>
           <span>Selected</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #f7768e"></div>
+          <div class="legend-color" style="background: #f7768e"></div>
           <span>Search</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #e0af68"></div>
+          <div class="legend-color" style="background: #e0af68"></div>
           <span>Connected</span>
         </div>
       </div>
 
-      <!-- Export Controls -->
+      <!-- Export -->
       <div class="controls-section export-controls">
         <div class="section-title">Export</div>
         <div class="button-group">
           <button id="btn-png" class="button" onclick="exportPNG()">PNG</button>
-          <button id="btn-json" class="button" onclick="customExportJSON()">
-            JSON
-          </button>
+          <button id="btn-json" class="button" onclick="customExportJSON()">JSON</button>
         </div>
       </div>
     </div>
+    <!-- /#info-box -->
 
-    <!-- Vis.js Container -->
     <div id="mynetwork"></div>
 
-    <!-- Scripts -->
     <script type="text/javascript">
-      // Include the vis.js library (this would be a file include in a real scenario)
       __VISJS_LIBRARY__;
     </script>
     <script type="text/javascript">
-      // Common JS functions will be injected here by Python
       __SHARED_JS__;
     </script>
     <script type="text/javascript">
@@ -159,11 +141,10 @@
       const rawEdgesData = __EDGES_DATA__;
       const isDirected = __GRAPH_DIRECTED__;
 
-      // ----- Vis.js Setup ----- //
+      // ----- State ----- //
       let network;
-      let currentLayout = "physics";
+      let currentLayout = 'physics';
 
-      // Process raw data into vis.js format
       const processedNodes = rawNodesData.map((node) => ({
         id: node.id,
         label: String(node.label),
@@ -174,15 +155,15 @@
       const processedEdges = rawEdgesData.map((edge) => ({
         ...edge,
         arrows: edge.directed ? { to: { enabled: true, scaleFactor: 1 } } : {},
-        smooth: edge.directed ? { type: "dynamic" } : false,
+        smooth: edge.directed ? { type: 'dynamic' } : false,
       }));
 
       const nodes = new vis.DataSet(processedNodes);
       const edges = new vis.DataSet(processedEdges);
-      const data = { nodes: nodes, edges: edges };
-      const container = document.getElementById("mynetwork");
+      const data = { nodes, edges };
+      const container = document.getElementById('mynetwork');
 
-      // ----- Layout & Base Options ----- //
+      // ----- Layout configurations ----- //
       const layoutConfigs = {
         physics: {
           physics: {
@@ -202,8 +183,8 @@
           layout: {
             hierarchical: {
               enabled: true,
-              sortMethod: "hubsize",
-              direction: "UD",
+              sortMethod: 'hubsize',
+              direction: 'UD',
               nodeSpacing: 150,
               levelSeparation: 170,
               parentCentralization: true,
@@ -227,21 +208,12 @@
       };
 
       const baseOptions = {
-        interaction: {
-          hover: true,
-          tooltipDelay: 200,
-          selectConnectedEdges: false,
-        },
+        interaction: { hover: true, tooltipDelay: 200, selectConnectedEdges: false },
         nodes: {
-          shape: "box",
+          shape: 'box',
           shapeProperties: { borderRadius: 6 },
           margin: 12,
-          font: {
-            color: colorPalette.textDefault,
-            size: 16,
-            face: "arial",
-            bold: { color: colorPalette.textDefault },
-          },
+          font: { color: colorPalette.textDefault, size: 15, face: 'arial' },
           borderWidth: 2,
           color: {
             border: colorPalette.nodeBorder,
@@ -250,18 +222,9 @@
               border: colorPalette.nodeSelectedBorder,
               background: colorPalette.nodeSelected,
             },
-            hover: {
-              border: colorPalette.nodeHover,
-              background: colorPalette.nodeHover,
-            },
+            hover: { border: colorPalette.nodeHover, background: colorPalette.nodeHover },
           },
-          shadow: {
-            enabled: true,
-            color: "rgba(0, 0, 0, 0.5)",
-            size: 20,
-            x: 5,
-            y: 5,
-          },
+          shadow: { enabled: true, color: 'rgba(0,0,0,0.45)', size: 18, x: 4, y: 4 },
         },
         edges: {
           arrows: isDirected ? { to: { enabled: true, scaleFactor: 1 } } : {},
@@ -272,53 +235,38 @@
             inherit: false,
             opacity: 0.9,
           },
-          smooth: { type: "dynamic" },
+          smooth: { type: 'dynamic' },
         },
       };
 
-      // ----- Graph-Specific Functions ----- //
-
-      /**
-       * Creates or recreates the network with a specified layout.
-       * @param {string} layoutType - The key for the layout configuration ('physics', 'hierarchical', etc.).
-       */
+      // ----- Network creation ----- //
       function createNetwork(layoutType) {
         const options = { ...baseOptions, ...layoutConfigs[layoutType] };
         if (network) network.destroy();
         network = new vis.Network(container, data, options);
-
-        // Attach event listeners
-        network.on("click", handleNodeClick);
-        network.on("hoverNode", handleNodeHover);
-        network.on("blurNode", handleNodeBlur);
-        network.on("stabilizationIterationsDone", updateStats);
-        updateStats(); // Initial call
+        network.on('click', handleNodeClick);
+        network.on('hoverNode', handleNodeHover);
+        network.on('blurNode', handleNodeBlur);
+        network.on('stabilizationIterationsDone', updateStats);
+        updateStats();
       }
 
-      /**
-       * Changes the network layout and recreates the visualization.
-       * @param {string} layoutType - The new layout to apply.
-       */
       function setLayout(layoutType) {
         currentLayout = layoutType;
         document
-          .querySelectorAll(".layout-controls button")
-          .forEach((btn) => btn.classList.remove("active"));
-        document.getElementById(`${layoutType}-btn`).classList.add("active");
+          .querySelectorAll('.layout-controls button')
+          .forEach((btn) => btn.classList.remove('active'));
+        document.getElementById(`${layoutType}-btn`).classList.add('active');
         createNetwork(layoutType);
       }
 
-      /**
-       * Handles clicks on nodes to highlight them and their connections.
-       */
+      // ----- Click / Info ----- //
       function handleNodeClick(params) {
         resetColors();
         hideConnectedNodes();
 
         if (params.nodes.length > 0) {
           const selectedNodeId = params.nodes[0];
-
-          // Highlight selected node
           nodes.update({
             id: selectedNodeId,
             color: {
@@ -327,7 +275,6 @@
             },
           });
 
-          // Highlight connected nodes and edges
           const connectedEdges = network.getConnectedEdges(selectedNodeId);
           edges.update(
             connectedEdges.map((edgeId) => ({
@@ -355,81 +302,68 @@
         }
       }
 
-      /**
-       * Displays information about the selected node.
-       */
       function showNodeInfo(nodeData) {
-        const infoDiv = document.getElementById("node-info");
-        const detailsDiv = document.getElementById("node-details");
+        const infoDiv = document.getElementById('node-info');
+        const detailsDiv = document.getElementById('node-details');
         const connections = network.getConnectedEdges(nodeData.id).length;
-        detailsDiv.innerHTML = `<strong>Label:</strong> ${nodeData.label}<br><strong>ID:</strong> ${nodeData.id}<br><strong>Connections:</strong> ${connections}`;
-        infoDiv.style.display = "block";
+        detailsDiv.innerHTML =
+          createStatRow('Label', nodeData.label) +
+          createStatRow('Address', createAddressChip(nodeData.id)) +
+          createStatRow('Connections', connections);
+        infoDiv.style.display = 'block';
       }
 
-      /**
-       * Displays the list of connected nodes.
-       * @param {string} selectedNodeId - The ID of the selected node.
-       * @param {Array} connectedNodeIds - Array of connected node IDs.
-       */
       function showConnectedNodes(selectedNodeId, connectedNodeIds) {
-        const connectedDiv = document.getElementById("connected-nodes");
-        const listDiv = document.getElementById("connected-list");
+        const connectedDiv = document.getElementById('connected-nodes');
+        const listDiv = document.getElementById('connected-list');
 
         if (connectedNodeIds.length === 0) {
-          listDiv.innerHTML = "<em>No connected nodes</em>";
+          listDiv.innerHTML = `<em class="hint-text">No connected nodes</em>`;
         } else {
-          const connectedNodesData = connectedNodeIds.map((id) =>
-            nodes.get(id)
-          );
-          const nodesList = connectedNodesData
-            .map(
-              (node) =>
-                `<div class="connected-node-item">${node.label} (ID: ${node.id})</div>`
-            )
-            .join("");
-          listDiv.innerHTML = nodesList;
+          listDiv.innerHTML = connectedNodeIds
+            .map((id) => {
+              const node = nodes.get(id);
+              return node ? createNodeChip('→', node.label, createAddressChip(node.id)) : '';
+            })
+            .join('');
         }
-
-        connectedDiv.style.display = "block";
+        connectedDiv.style.display = 'block';
       }
 
-      /**
-       * Hides the connected nodes section.
-       */
       function hideConnectedNodes() {
-        const connectedDiv = document.getElementById("connected-nodes");
-        if (connectedDiv) {
-          connectedDiv.style.display = "none";
-        }
+        const el = document.getElementById('connected-nodes');
+        if (el) el.style.display = 'none';
       }
 
-      /**
-       * Updates the statistics panel with current graph metrics.
-       */
+      // ----- Statistics ----- //
       function updateStats() {
-        const statsDiv = document.getElementById("graph-stats");
+        const statsDiv = document.getElementById('graph-stats');
         const nodeCount = nodes.length;
         const edgeCount = edges.length;
-        const avgDegree =
-          nodeCount > 0 ? ((2 * edgeCount) / nodeCount).toFixed(2) : 0;
-        statsDiv.innerHTML = `<strong>Nodes:</strong> ${nodeCount}<br><strong>Edges:</strong> ${edgeCount}<br><strong>Avg. Degree:</strong> ${avgDegree}<br><strong>Mode:</strong> ${isDirected ? "Directed" : "Undirected"}<br><strong>Layout:</strong> ${currentLayout}`;
+        const avgDegree = nodeCount > 0 ? ((2 * edgeCount) / nodeCount).toFixed(2) : '0.00';
+        statsDiv.innerHTML =
+          createStatRow('Nodes', nodeCount) +
+          createStatRow('Edges', edgeCount) +
+          createStatRow('Avg Degree', avgDegree) +
+          createStatRow('Mode', isDirected ? 'Directed' : 'Undirected') +
+          createStatRow('Layout', currentLayout);
       }
 
-      /**
-       * Prepares graph data and calls the shared JSON export function.
-       */
+      // ----- JSON export ----- //
       function customExportJSON() {
-        const graphData = {
-          nodes: nodes.get(),
-          edges: edges.get(),
-          directed: isDirected,
-          layout: currentLayout,
-          timestamp: new Date().toISOString(),
-        };
-        exportJSON(graphData, "graph-data.json");
+        exportJSON(
+          {
+            nodes: nodes.get(),
+            edges: edges.get(),
+            directed: isDirected,
+            layout: currentLayout,
+            timestamp: new Date().toISOString(),
+          },
+          'graph-data.json'
+        );
       }
 
-      // ----- Initialisation ----- //
+      // ----- Init ----- //
       createNetwork(currentLayout);
     </script>
   </body>

@@ -12,8 +12,10 @@ Version: 0.5.0.dev0
 """
 # ============================================================================ #
 
+import html
 import json
 import os
+import re
 import tempfile
 import webbrowser
 
@@ -33,8 +35,9 @@ from .renderers import (
     build_list_renderer_payload,
     build_tree_renderer_payload,
 )
-from .schema_adapters import resolve_tree_container_schema
 from .visualization_options import create_tree_traversal_strategy, parse_graph_render_mode
+
+_TEMPLATE_PLACEHOLDER_RE = re.compile(r"__[A-Z0-9_]+__")
 
 # ----------------------------------------------------------------------- #
 # SECTION 1: PRIVATE HELPER FUNCTIONS
@@ -73,30 +76,43 @@ def _load_shared_js():
     return _load_static_file("common.js")
 
 
-def _build_visjs_data_for_list(valobj):
+def _build_visjs_data_for_list(valobj, extracted_list=None):
     """
     Extract and convert a list value into the payload expected by the renderer.
 
     The helper returns `None` when the structure is empty or unsupported, which
     allows the caller to reuse a single validation path for LLDB commands.
     """
-    extracted_list = extract_linear_structure(valobj)
+    if extracted_list is None:
+        extracted_list = extract_linear_structure(valobj)
     if extracted_list.error_message or extracted_list.is_empty:
         return None
     return build_list_renderer_payload(extracted_list)
 
 
-def _build_visjs_data_for_graph(valobj, directed=True):
+def _build_visjs_data_for_graph(valobj, directed=True, extracted_graph=None):
     """
     Extract and convert a graph value into the payload expected by the renderer.
 
     The `directed` flag only affects the rendered edge semantics; extraction
     still operates on the same normalized graph model.
     """
-    extracted_graph = extract_graph_structure(valobj)
+    if extracted_graph is None:
+        extracted_graph = extract_graph_structure(valobj)
     if extracted_graph.is_empty or extracted_graph.error_message:
         return None
     return build_graph_renderer_payload(extracted_graph, directed=directed)
+
+
+def _build_type_info_html(section_title, info):
+    """Render one escaped info table block for the visualizer side panel."""
+
+    rows = []
+    for key, value in info.items():
+        safe_key = html.escape(str(key))
+        safe_value = html.escape(str(value))
+        rows.append(f"<tr><th>{safe_key}</th><td>{safe_value}</td></tr>")
+    return f"<h3>{html.escape(section_title)}</h3><table>{''.join(rows)}</table>"
 
 
 # ----------------------------------------------------------------------- #
@@ -112,9 +128,10 @@ def _generate_html(template_name, template_data):
     Shared CSS, JavaScript, and the embedded vis.js library are injected here
     so the generated output remains fully self-contained.
     """
-    template_data["__VISJS_LIBRARY__"] = _load_visjs_library()
-    template_data["__SHARED_CSS__"] = _load_shared_css()
-    template_data["__SHARED_JS__"] = _load_shared_js()
+    template_values = dict(template_data)
+    template_values["__VISJS_LIBRARY__"] = _load_visjs_library()
+    template_values["__SHARED_CSS__"] = _load_shared_css()
+    template_values["__SHARED_JS__"] = _load_shared_js()
 
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -122,21 +139,27 @@ def _generate_html(template_name, template_data):
         with open(template_path, "r", encoding="utf-8") as f:
             final_html = f.read()
         # Replace all placeholders with their corresponding data
-        for placeholder, value in template_data.items():
+        for placeholder, value in template_values.items():
             final_html = final_html.replace(placeholder, str(value))
+
+        unreplaced = sorted(set(_TEMPLATE_PLACEHOLDER_RE.findall(final_html)))
+        if unreplaced:
+            raise ValueError(
+                f"Template '{template_name}' still contains unreplaced placeholders: {', '.join(unreplaced)}"
+            )
         return final_html
     except Exception as e:
         return f"<html><body>Error generating visualizer from template '{template_name}': {e}</body></html>"
 
 
-def generate_list_visualization_html(valobj):
+def generate_list_visualization_html(valobj, extracted_list=None):
     """
     Generate the full HTML document used to visualize a linear container.
 
     The returned document contains both the vis.js payload and a compact table
     with the most relevant metadata about the selected list variable.
     """
-    list_data = _build_visjs_data_for_list(valobj)
+    list_data = _build_visjs_data_for_list(valobj, extracted_list=extracted_list)
     if not list_data:
         return None
 
@@ -147,10 +170,7 @@ def generate_list_visualization_html(valobj):
         "Size": list_data["list_size"],
         "Is Doubly Linked": "Yes" if list_data["is_doubly_linked"] else "No",
     }
-    info_html = "<h3>List Information</h3><table>"
-    for key, value in info.items():
-        info_html += f"<tr><th>{key}</th><td>{value}</td></tr>"
-    info_html += "</table>"
+    info_html = _build_type_info_html("List Information", info)
 
     template_data = {
         "__NODES_DATA__": json.dumps(list_data["nodes_data"]),
@@ -163,18 +183,19 @@ def generate_list_visualization_html(valobj):
     return _generate_html("list_visualizer.html", template_data)
 
 
-def generate_tree_visualization_html(valobj, traversal_name=None):
+def generate_tree_visualization_html(valobj, traversal_name=None, extracted_tree=None):
     """
     Generate the full HTML document used to visualize a tree container.
 
     When a traversal name is supplied, the corresponding strategy is resolved
     and its visit order is embedded so the page can annotate that sequence.
     """
-    extracted_tree = extract_tree_structure(valobj)
+    if extracted_tree is None:
+        extracted_tree = extract_tree_structure(valobj)
     if extracted_tree.is_empty or extracted_tree.error_message:
         return None
 
-    root_ptr = resolve_tree_container_schema(valobj).root_ptr
+    root_ptr = extracted_tree.root_ptr
     traversal_addresses = None
     resolved_traversal_name = None
     if root_ptr:
@@ -197,10 +218,7 @@ def generate_tree_visualization_html(valobj, traversal_name=None):
         "Root Address": tree_data["root_address"],
         "Traversal": resolved_traversal_name or "n/a",
     }
-    info_html = "<h3>Tree Information</h3><table>"
-    for key, value in info.items():
-        info_html += f"<tr><th>{key}</th><td>{value}</td></tr>"
-    info_html += "</table>"
+    info_html = _build_type_info_html("Tree Information", info)
 
     template_data = {
         "__NODES_DATA__": json.dumps(tree_data["nodes_data"]),
@@ -210,18 +228,23 @@ def generate_tree_visualization_html(valobj, traversal_name=None):
     return _generate_html("tree_visualizer.html", template_data)
 
 
-def generate_graph_visualization_html(valobj, directed=True):
+def generate_graph_visualization_html(valobj, directed=True, extracted_graph=None):
     """
     Generate the full HTML document used to visualize a graph container.
 
     The resulting page includes graph metadata and the node/edge payload needed
     by the interactive front-end renderer.
     """
-    extracted_graph = extract_graph_structure(valobj)
+    if extracted_graph is None:
+        extracted_graph = extract_graph_structure(valobj)
     if extracted_graph.is_empty or extracted_graph.error_message:
         return None
 
-    graph_data = _build_visjs_data_for_graph(valobj, directed=directed)
+    graph_data = _build_visjs_data_for_graph(
+        valobj,
+        directed=directed,
+        extracted_graph=extracted_graph,
+    )
     if not graph_data:
         return None
 
@@ -233,10 +256,7 @@ def generate_graph_visualization_html(valobj, directed=True):
         "Edges (E)": graph_data["num_edges"],
         "Mode": "Directed" if graph_data["directed"] else "Undirected",
     }
-    info_html = "<h3>Graph Information</h3><table>"
-    for key, value in info.items():
-        info_html += f"<tr><th>{key}</th><td>{value}</td></tr>"
-    info_html += "</table>"
+    info_html = _build_type_info_html("Graph Information", info)
 
     template_data = {
         "__NODES_DATA__": json.dumps(graph_data["nodes_data"]),
@@ -319,7 +339,7 @@ def export_list_web_command(debugger, command, result, internal_dict):
     extraction = extract_linear_structure(valobj)
     if not _validate_visualizable_structure(result, "list", extraction):
         return
-    html_content = generate_list_visualization_html(valobj)
+    html_content = generate_list_visualization_html(valobj, extracted_list=extraction)
     _display_html_content(html_content, var_name, result)
 
 
@@ -347,7 +367,11 @@ def export_tree_web_command(debugger, command, result, internal_dict):
     extraction = extract_tree_structure(valobj)
     if not _validate_visualizable_structure(result, "tree", extraction):
         return
-    html_content = generate_tree_visualization_html(valobj, traversal_name=resolved_traversal_name)
+    html_content = generate_tree_visualization_html(
+        valobj,
+        traversal_name=resolved_traversal_name,
+        extracted_tree=extraction,
+    )
     _display_html_content(html_content, var_name, result)
 
 
@@ -372,5 +396,9 @@ def export_graph_web_command(debugger, command, result, internal_dict):
     extraction = extract_graph_structure(valobj)
     if not _validate_visualizable_structure(result, "graph", extraction):
         return
-    html_content = generate_graph_visualization_html(valobj, directed=directed)
+    html_content = generate_graph_visualization_html(
+        valobj,
+        directed=directed,
+        extracted_graph=extraction,
+    )
     _display_html_content(html_content, var_name, result)

@@ -1,47 +1,37 @@
-// common.js
-// Contains shared functions and configurations for all visualizers.
+/* ================= Common JS - Shared Functions ================= */
+// common.js — Shared functions and configuration for all Pretty LLDB visualizers.
 
 // ----- Tokyo Night Color Palette ----- //
 const colorPalette = {
-  // Theme colors for nodes and edges
-  nodeDefault: "#7aa2f7",
-  nodeBorder: "#565f89",
-  nodeSelected: "#bb9af7",
-  nodeSelectedBorder: "#9d7cd8",
-  nodeHighlighted: "#e0af68",
-  nodeHighlightedBorder: "#c49a61",
-  nodeAnimated: "#9ece6a",
-  nodeAnimatedBorder: "#73a84c",
-  nodeSearchResult: "#f7768e",
-  nodeSearchBorder: "#e06b83",
-  nodeHover: "#9ece6a",
+  nodeDefault: '#7aa2f7',
+  nodeBorder: '#565f89',
+  nodeSelected: '#bb9af7',
+  nodeSelectedBorder: '#9d7cd8',
+  nodeHighlighted: '#e0af68',
+  nodeHighlightedBorder: '#c49a61',
+  nodeAnimated: '#9ece6a',
+  nodeAnimatedBorder: '#73a84c',
+  nodeSearchResult: '#f7768e',
+  nodeSearchBorder: '#e06b83',
+  nodeHover: '#9ece6a',
 
-  edgeDefault: "#565f89",
-  edgeSelected: "#bb9af7",
-  edgeHighlighted: "#e0af68",
+  edgeDefault: '#565f89',
+  edgeSelected: '#bb9af7',
+  edgeHighlighted: '#e0af68',
 
-  textDefault: "#ffffffff",
+  textDefault: '#ffffffff',
 
-  // Theme structure
-  blue: "#7aa2f7",
-  purple: "#bb9af7",
-  red: "#f7768e",
-  orange: "#e0af68",
-  green: "#9ece6a",
+  blue: '#7aa2f7',
+  purple: '#bb9af7',
+  red: '#f7768e',
+  orange: '#e0af68',
+  green: '#9ece6a',
 
-  dark: {
-    text: "#c0caf5",
-    surface: "#24283b",
-    border: "#414868",
-  },
-  light: {
-    text: "#1a1b26",
-    surface: "#c0caf5",
-    border: "#a9b1d6",
-  },
+  dark: { text: '#c0caf5', surface: '#24283b', border: '#414868' },
+  light: { text: '#1a1b26', surface: '#c0caf5', border: '#a9b1d6' },
 };
 
-// Object to hold clean, professional SVG icons.
+// ----- SVG Icons ----- //
 const svgIcons = {
   theme: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
   expand: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>`,
@@ -56,137 +46,141 @@ const svgIcons = {
   step: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>`,
 };
 
-// ----- Shared Utility Functions ----- //
+/* ==================== STRUCTURED UI HELPERS ===================== */
 
 /**
- * Injects SVG icons into their respective buttons.
+ * Returns an HTML string for one stat row: key on the left, value on the right.
+ * @param {string} key   - Label for the row.
+ * @param {string|number} value - Value to display (may contain inner HTML).
+ */
+function createStatRow(key, value) {
+  return `<div class="stat-row"><span class="stat-key">${key}</span><span class="stat-value">${value}</span></div>`;
+}
+
+/**
+ * Returns an HTML string for a monospace address chip.
+ * @param {string} address - The address string to display.
+ */
+function createAddressChip(address) {
+  return `<span class="address-mono">${address}</span>`;
+}
+
+/**
+ * Returns an HTML string for a connected-node chip entry.
+ * @param {string} arrow   - Direction indicator (e.g. "↑", "↓", "→").
+ * @param {string} label   - Node label text.
+ * @param {string} [extra] - Optional extra HTML appended after the label.
+ */
+function createNodeChip(arrow, label, extra) {
+  const extraHtml = extra ? ` ${extra}` : '';
+  return `<div class="connected-node-item"><span class="rel-arrow">${arrow}</span>${label}${extraHtml}</div>`;
+}
+
+/* ======================== ICON INJECTION ======================== */
+
+/**
+ * Injects SVG icons into buttons that have a matching `id="btn-<key>"`.
  */
 function applyIcons() {
   for (const [key, svg] of Object.entries(svgIcons)) {
     const button = document.getElementById(`btn-${key}`);
     if (button) {
-      // Preserve the original text content and prepend the icon
       const originalText = button.textContent.trim();
       button.innerHTML = `<span class="button-icon">${svg}</span> ${originalText}`;
     }
   }
 }
 
-/**
- * Manages theme switching (light/dark) and saves the preference.
- */
+/* ========================= THEME TOGGLE ========================= */
+
 function toggleTheme() {
   const body = document.body;
-  body.classList.toggle("light-theme");
-  const isLight = body.classList.contains("light-theme");
+  body.classList.toggle('light-theme');
+  const isLight = body.classList.contains('light-theme');
   try {
-    localStorage.setItem("theme", isLight ? "light" : "dark");
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
   } catch (e) {
-    // Handle localStorage not available
-    console.warn("localStorage not available for theme persistence");
+    console.warn('localStorage not available for theme persistence');
   }
   updateThemeButton(isLight);
 }
 
-/**
- * Updates the theme button's text and icon.
- * @param {boolean} isLight - True if the current theme is light.
- */
 function updateThemeButton(isLight) {
-  const themeToggleButton = document.getElementById("theme-toggle-btn");
-  if (themeToggleButton) {
-    const themeName = isLight ? "Dark" : "Light";
-    themeToggleButton.innerHTML = `<span class="button-icon">${svgIcons.theme}</span> Switch to ${themeName} Theme`;
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) {
+    const themeName = isLight ? 'Dark' : 'Light';
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
+    btn.title = `Switch to ${themeName} theme`;
   }
 }
 
-/**
- * Auto-executing function to apply the saved theme on page load.
- */
 (function () {
-  let savedTheme = "dark"; // default to dark
+  let savedTheme = 'dark';
   try {
-    savedTheme = localStorage.getItem("theme") || "dark";
+    savedTheme = localStorage.getItem('theme') || 'dark';
   } catch (e) {
-    console.warn("localStorage not available for theme persistence");
+    console.warn('localStorage not available for theme persistence');
   }
+  const isLight = savedTheme === 'light';
+  if (isLight) document.body.classList.add('light-theme');
 
-  const isLight = savedTheme === "light";
-  if (isLight) {
-    document.body.classList.add("light-theme");
-  }
-
-  // Update the button text after the DOM is fully loaded.
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener('DOMContentLoaded', () => {
     updateThemeButton(isLight);
-    applyIcons(); // Apply all other icons as well
+    applyIcons();
   });
 })();
 
-/**
- * Toggles the visibility of the info panel.
- */
-function toggleInfoBox() {
-  const infoBox = document.getElementById("info-box");
-  const toggleBtn = document.getElementById("toggle-info-btn");
+/* ====================== INFO PANEL TOGGLE ======================= */
 
+function toggleInfoBox() {
+  const infoBox = document.getElementById('info-box');
+  const toggleBtn = document.getElementById('toggle-info-btn');
   if (!infoBox || !toggleBtn) return;
 
-  infoBox.classList.toggle("hidden");
-  if (infoBox.classList.contains("hidden")) {
-    toggleBtn.classList.remove("info-visible");
-    toggleBtn.innerHTML = "⚙";
-    toggleBtn.title = "Show Info Panel";
+  infoBox.classList.toggle('hidden');
+  if (infoBox.classList.contains('hidden')) {
+    toggleBtn.classList.remove('info-visible');
+    toggleBtn.innerHTML = '⚙';
+    toggleBtn.title = 'Show Info Panel';
   } else {
-    toggleBtn.classList.add("info-visible");
-    toggleBtn.innerHTML = "➤";
-    toggleBtn.title = "Hide Info Panel";
+    toggleBtn.classList.add('info-visible');
+    toggleBtn.innerHTML = '✕';
+    toggleBtn.title = 'Hide Info Panel';
   }
 }
 
-/**
- * Exports the current network view as a PNG image.
- */
+/* ======================= EXPORT FUNCTIONS ======================= */
+
 function exportPNG() {
   if (!network || !network.canvas || !network.canvas.frame) {
-    console.error("Network canvas not available for PNG export");
+    console.error('Network canvas not available for PNG export');
     return;
   }
-
   const canvas = network.canvas.frame.canvas;
-  const link = document.createElement("a");
-  link.download = "visualization.png";
+  const link = document.createElement('a');
+  link.download = 'visualization.png';
   link.href = canvas.toDataURL();
   link.click();
 }
 
-/**
- * Exports the provided data object as a JSON file.
- * @param {object} dataToExport - The specific data object to be stringified and exported.
- * @param {string} filename - The desired name for the downloaded file.
- */
-function exportJSON(dataToExport, filename = "data.json") {
+function exportJSON(dataToExport, filename = 'data.json') {
   const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
-    type: "application/json",
+    type: 'application/json',
   });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const link = document.createElement('a');
   link.href = url;
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
 }
 
-/**
- * Fits the network view to the screen.
- */
+/* ================= VIS.JS INTERACTIONS HELPERS ================== */
+
 function centerView() {
   if (network) network.fit();
 }
 
-/**
- * Clears the current selection and hides the node info panel.
- */
 function clearSelection() {
   if (network) {
     network.unselectAll();
@@ -195,22 +189,15 @@ function clearSelection() {
   }
 }
 
-/**
- * Hides the node information panel.
- */
 function hideNodeInfo() {
-  const nodeInfo = document.getElementById("node-info");
-  if (nodeInfo) nodeInfo.style.display = "none";
+  const nodeInfo = document.getElementById('node-info');
+  if (nodeInfo) nodeInfo.style.display = 'none';
 }
 
-/**
- * Resets the colors of all nodes and edges to their default state.
- */
 function resetColors() {
   if (!nodes || !edges) return;
-
   const nodeUpdates = nodes.getIds().map((id) => ({
-    id: id,
+    id,
     color: {
       background: colorPalette.nodeDefault,
       border: colorPalette.nodeBorder,
@@ -219,87 +206,65 @@ function resetColors() {
   if (nodeUpdates.length > 0) nodes.update(nodeUpdates);
 
   const edgeUpdates = edges.getIds().map((id) => ({
-    id: id,
+    id,
     color: { color: colorPalette.edgeDefault },
   }));
   if (edgeUpdates.length > 0) edges.update(edgeUpdates);
 }
 
-/**
- * Clears any highlighting from search or selection.
- */
 function clearHighlights() {
   resetColors();
-  const searchInput = document.getElementById("search-input");
-  if (searchInput) {
-    searchInput.value = "";
-  }
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) searchInput.value = '';
 }
 
-/**
- * Highlights nodes that match a search query.
- * @param {string} query - The text to search for in node labels and titles.
- */
 function searchNodes(query) {
   if (!nodes) return;
-
   resetColors();
   if (!query.trim()) return;
 
   const matchingNodes = nodes.get({
     filter: (node) =>
       String(node.label).toLowerCase().includes(query.toLowerCase()) ||
-      (node.title &&
-        String(node.title).toLowerCase().includes(query.toLowerCase())),
+      (node.title && String(node.title).toLowerCase().includes(query.toLowerCase())),
   });
 
   if (matchingNodes.length > 0) {
-    const updates = matchingNodes.map((node) => ({
-      id: node.id,
-      color: {
-        background: colorPalette.nodeSearchResult,
-        border: colorPalette.nodeSearchBorder,
-      },
-    }));
-    nodes.update(updates);
+    nodes.update(
+      matchingNodes.map((node) => ({
+        id: node.id,
+        color: {
+          background: colorPalette.nodeSearchResult,
+          border: colorPalette.nodeSearchBorder,
+        },
+      }))
+    );
   }
 }
 
-/**
- * Handles the hover event on a node to show its title.
- */
 function handleNodeHover(params) {
   if (!params.node || !nodes) return;
-
-  const nodeId = params.node;
-  const nodeData = nodes.get(nodeId);
+  const nodeData = nodes.get(params.node);
   if (!nodeData) return;
-
   const title = nodeData.title || `Label: ${nodeData.label}`;
-  const networkElement = document.getElementById("mynetwork");
-  if (networkElement) {
-    networkElement.title = `${title}\nClick for details`;
-  }
+  const el = document.getElementById('mynetwork');
+  if (el) el.title = `${title}\nClick for details`;
 }
 
-/**
- * Handles the blur event on a node to clear the title.
- */
 function handleNodeBlur() {
-  const networkElement = document.getElementById("mynetwork");
-  if (networkElement) {
-    networkElement.title = "";
-  }
+  const el = document.getElementById('mynetwork');
+  if (el) el.title = '';
 }
 
-// ----- Initial UI State Setup ----- //
-document.addEventListener("DOMContentLoaded", () => {
-  const infoBox = document.getElementById("info-box");
-  const toggleBtn = document.getElementById("toggle-info-btn");
+/* ======================= INITIAL UI STATE ======================= */
+
+document.addEventListener('DOMContentLoaded', () => {
+  const infoBox = document.getElementById('info-box');
+  const toggleBtn = document.getElementById('toggle-info-btn');
   if (infoBox && toggleBtn) {
-    infoBox.classList.add("hidden");
-    toggleBtn.classList.remove("info-visible");
-    toggleBtn.innerHTML = "⚙️";
-    toggleBtn.title = "Show Info Panel";
+    infoBox.classList.add('hidden');
+    toggleBtn.classList.remove('info-visible');
+    toggleBtn.innerHTML = '⚙';
+    toggleBtn.title = 'Show Info Panel';
   }
 });

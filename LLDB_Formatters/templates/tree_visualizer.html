@@ -1,117 +1,99 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <title>Interactive Tree Visualizer</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pretty LLDB — Tree Visualizer</title>
     <style>
-      /* Injected styles start */
-      __SHARED_CSS__
-      /* Injected styles end */
-  
-      /* Fallback/base styles to maintain syntax highlighting */
-      body {
+      __SHARED_CSS__ body {
         padding: 0;
         margin: 0;
       }
     </style>
   </head>
   <body>
-    <!-- UI Controls -->
     <button
       id="toggle-info-btn"
       onclick="toggleInfoBox()"
-      title="Toggle Info Panel"
+      title="Show Info Panel"
+      aria-label="Toggle tree controls"
     >
-      ⚙️
+      ⚙
     </button>
 
-    <div id="info-box" class="hidden">
-      <h3>Tree Controls</h3>
-      <div class="theme-controls">
-        <button id="theme-toggle-btn" onclick="toggleTheme()">
-          Switch to Light Theme
-        </button>
+    <div id="info-box" class="hidden" role="complementary" aria-label="Tree controls">
+      <!-- Gradient accent bar -->
+      <div class="panel-accent panel-accent--tree"></div>
+
+      <!-- Header -->
+      <div class="panel-header">
+        <div class="panel-header-left">
+          <span class="panel-title">Tree Visualizer</span>
+          <span class="panel-badge panel-badge--tree">TREE</span>
+        </div>
+        <button id="theme-toggle-btn" class="icon-btn" onclick="toggleTheme()"></button>
       </div>
 
-      <div class="stats-display type-info-display">
-        __TYPE_INFO_HTML__
-      </div>
+      <!-- Type info injected by Python -->
+      <div class="stats-display type-info-display">__TYPE_INFO_HTML__</div>
 
       <!-- Tree Operations -->
       <div class="controls-section">
-        <div class="section-title">Tree Operations</div>
+        <div class="section-title">Tree</div>
         <div class="button-group">
-          <button id="btn-expand" class="button" onclick="expandAll()">
-            Expand All
-          </button>
-          <button id="btn-collapse" class="button" onclick="collapseAll()">
-            Collapse All
-          </button>
+          <button id="btn-expand" class="button" onclick="expandAll()">Expand All</button>
+          <button id="btn-collapse" class="button" onclick="collapseAll()">Collapse</button>
         </div>
         <div class="button-group">
-          <button id="btn-center" class="button" onclick="centerView()">
-            Center
-          </button>
-          <button id="btn-clear" class="button" onclick="clearSelection()">
-            Clear
-          </button>
+          <button id="btn-center" class="button" onclick="centerView()">Center</button>
+          <button id="btn-clear" class="button" onclick="clearSelection()">Clear</button>
         </div>
       </div>
 
-      <!-- Layout Controls -->
+      <!-- Layout -->
       <div class="controls-section layout-controls">
         <div class="section-title">Layout</div>
         <div class="button-group">
-          <button
-            class="button active"
-            onclick="setLayout('hierarchical')"
-            id="hierarchical-btn"
-          >
+          <button class="button active" onclick="setLayout('hierarchical')" id="hierarchical-btn">
             Top-Down
           </button>
-          <button class="button" onclick="setLayout('radial')" id="radial-btn">
-            Radial
-          </button>
-          <button
-            class="button"
-            onclick="setLayout('physics')"
-            id="physics-btn"
-          >
-            Physics
-          </button>
+          <button class="button" onclick="setLayout('radial')" id="radial-btn">Radial</button>
+          <button class="button" onclick="setLayout('physics')" id="physics-btn">Physics</button>
         </div>
       </div>
 
-      <!-- Search Controls -->
+      <!-- Search -->
       <div class="controls-section search-controls">
-        <div class="section-title">Search & Highlight</div>
+        <div class="section-title">Search</div>
         <input
           type="text"
           class="search-box"
           id="search-input"
-          placeholder="Search node values..."
+          placeholder="Search node values…"
+          autocomplete="off"
+          spellcheck="false"
           oninput="searchNodes(this.value)"
         />
         <div class="button-group" style="margin-top: 8px">
-          <button class="button" onclick="clearHighlights()">
-            Clear Search
-          </button>
+          <button class="button" onclick="clearHighlights()">Clear Search</button>
         </div>
       </div>
 
-      <!-- Statistics and Node Info -->
+      <!-- Statistics -->
       <div class="stats-display" id="stats-display">
-        <div class="section-title">Tree Statistics</div>
+        <div class="section-title">Statistics</div>
         <div id="tree-stats"></div>
       </div>
 
+      <!-- Selected node info -->
       <div class="node-info" id="node-info" style="display: none">
         <div class="section-title">Selected Node</div>
         <div id="node-details"></div>
       </div>
 
-      <!-- Connected Nodes Section (Children/Parents) -->
+      <!-- Parent/child relations -->
       <div class="connected-nodes" id="connected-nodes" style="display: none">
-        <div class="section-title">Node Relations</div>
+        <div class="section-title">Relations</div>
         <div id="connected-list"></div>
       </div>
 
@@ -119,49 +101,44 @@
       <div class="legend">
         <div class="section-title">Legend</div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #7aa2f7"></div>
+          <div class="legend-color" style="background: #7aa2f7"></div>
           <span>Normal</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #bb9af7"></div>
+          <div class="legend-color" style="background: #bb9af7"></div>
           <span>Selected</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #f7768e"></div>
+          <div class="legend-color" style="background: #f7768e"></div>
           <span>Search</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #e0af68"></div>
-          <span>Path/Connected</span>
+          <div class="legend-color" style="background: #e0af68"></div>
+          <span>Connected</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #565f89"></div>
+          <div class="legend-color" style="background: #565f89"></div>
           <span>Collapsed</span>
         </div>
       </div>
 
-      <!-- Export Controls -->
+      <!-- Export -->
       <div class="controls-section export-controls">
         <div class="section-title">Export</div>
         <div class="button-group">
           <button id="btn-png" class="button" onclick="exportPNG()">PNG</button>
-          <button id="btn-json" class="button" onclick="customExportJSON()">
-            JSON
-          </button>
+          <button id="btn-json" class="button" onclick="customExportJSON()">JSON</button>
         </div>
       </div>
     </div>
+    <!-- /#info-box -->
 
-    <!-- Vis.js Container -->
     <div id="mynetwork"></div>
 
-    <!-- Scripts -->
     <script type="text/javascript">
-      // Include the vis.js library
       __VISJS_LIBRARY__;
     </script>
     <script type="text/javascript">
-      // Common JS functions will be injected here by Python
       __SHARED_JS__;
     </script>
     <script type="text/javascript">
@@ -169,39 +146,36 @@
       const rawNodesData = __NODES_DATA__;
       const rawEdgesData = __EDGES_DATA__;
 
-      // ----- Vis.js Setup ----- //
+      // ----- State ----- //
       let network;
-      let currentLayout = "hierarchical";
+      let currentLayout = 'hierarchical';
       let originalNodes = new vis.DataSet();
       let originalEdges = new vis.DataSet();
-      let collapsedNodes = new Set(); // Track collapsed nodes
+      let collapsedNodes = new Set();
 
-      // Process raw data into vis.js format
       const processedNodes = rawNodesData.map((node) => ({
         id: node.id,
         label: String(node.label),
         title: node.title,
-        originalData: node, // Keep reference to original data
+        originalData: node,
       }));
 
       const nodes = new vis.DataSet(processedNodes);
       const edges = new vis.DataSet(rawEdgesData);
+      const data = { nodes, edges };
+      const container = document.getElementById('mynetwork');
 
-      // Store original data for expand/collapse operations
       originalNodes.update(processedNodes);
       originalEdges.update(rawEdgesData);
 
-      const data = { nodes: nodes, edges: edges };
-      const container = document.getElementById("mynetwork");
-
-      // ----- Layout & Base Options ----- //
+      // ----- Layout configurations ----- //
       const layoutConfigs = {
         hierarchical: {
           layout: {
             hierarchical: {
               enabled: true,
-              sortMethod: "directed",
-              direction: "UD",
+              sortMethod: 'directed',
+              direction: 'UD',
               nodeSpacing: 120,
               levelSeparation: 100,
             },
@@ -211,7 +185,7 @@
         radial: {
           layout: { randomSeed: 2 },
           physics: {
-            solver: "hierarchicalRepulsion",
+            solver: 'hierarchicalRepulsion',
             hierarchicalRepulsion: {
               centralGravity: 0.0,
               springLength: 150,
@@ -246,15 +220,10 @@
           navigationButtons: false,
         },
         nodes: {
-          shape: "box",
+          shape: 'box',
           shapeProperties: { borderRadius: 6 },
           margin: 12,
-          font: {
-            color: colorPalette.textDefault,
-            size: 16,
-            face: "arial",
-            bold: { color: colorPalette.textDefault },
-          },
+          font: { color: colorPalette.textDefault, size: 15, face: 'arial' },
           borderWidth: 2,
           color: {
             border: colorPalette.nodeBorder,
@@ -263,18 +232,9 @@
               border: colorPalette.nodeSelectedBorder,
               background: colorPalette.nodeSelected,
             },
-            hover: {
-              border: colorPalette.nodeHover,
-              background: colorPalette.nodeHover,
-            },
+            hover: { border: colorPalette.nodeHover, background: colorPalette.nodeHover },
           },
-          shadow: {
-            enabled: true,
-            color: "rgba(0, 0, 0, 0.5)",
-            size: 20,
-            x: 5,
-            y: 5,
-          },
+          shadow: { enabled: true, color: 'rgba(0,0,0,0.45)', size: 18, x: 4, y: 4 },
         },
         edges: {
           arrows: { to: { enabled: true, scaleFactor: 0.8 } },
@@ -287,256 +247,129 @@
           },
           smooth: {
             enabled: true,
-            type: "cubicBezier",
-            forceDirection: "vertical",
+            type: 'cubicBezier',
+            forceDirection: 'vertical',
             roundness: 0.4,
           },
         },
       };
 
-      // ----- Tree-Specific Functions ----- //
-
-      /**
-       * Creates or recreates the network with a specified layout.
-       */
+      // ----- Network creation ----- //
       function createNetwork(layoutType) {
         const options = { ...baseOptions, ...layoutConfigs[layoutType] };
         if (network) network.destroy();
         network = new vis.Network(container, data, options);
-
-        // Attach event listeners
-        network.on("click", handleNodeClick);
-        network.on("doubleClick", handleNodeDoubleClick);
-        network.on("hoverNode", handleNodeHover);
-        network.on("blurNode", handleNodeBlur);
-        network.on("stabilizationIterationsDone", updateStats);
-        updateStats(); // Initial call
+        network.on('click', handleNodeClick);
+        network.on('doubleClick', handleNodeDoubleClick);
+        network.on('hoverNode', handleNodeHover);
+        network.on('blurNode', handleNodeBlur);
+        network.on('stabilizationIterationsDone', updateStats);
+        updateStats();
       }
 
-      /**
-       * Changes the network layout.
-       */
       function setLayout(layoutType) {
         currentLayout = layoutType;
         document
-          .querySelectorAll(".layout-controls button")
-          .forEach((btn) => btn.classList.remove("active"));
-        document.getElementById(`${layoutType}-btn`).classList.add("active");
+          .querySelectorAll('.layout-controls button')
+          .forEach((btn) => btn.classList.remove('active'));
+        document.getElementById(`${layoutType}-btn`).classList.add('active');
         createNetwork(layoutType);
       }
 
-      /**
-       * Expands all collapsed nodes to show the full tree.
-       */
+      // ----- Expand / Collapse ----- //
       function expandAll() {
         collapsedNodes.clear();
-
-        // Restore all original nodes and edges
         nodes.clear();
         edges.clear();
         nodes.update(originalNodes.get());
         edges.update(originalEdges.get());
-
-        // Reset all node colors
         resetColors();
         updateStats();
-
-        // Fit the network to show all nodes
-        if (network) {
-          setTimeout(() => network.fit(), 100);
-        }
+        if (network) setTimeout(() => network.fit(), 100);
       }
 
-      /**
-       * Collapses all nodes except root and its direct children.
-       */
       function collapseAll() {
         const allNodes = originalNodes.get();
         const allEdges = originalEdges.get();
+        const nodesWithParents = new Set(allEdges.map((e) => e.to));
+        const rootNodes = allNodes.filter((n) => !nodesWithParents.has(n.id));
 
-        // Find root nodes (nodes with no incoming edges)
-        const nodesWithParents = new Set(allEdges.map((edge) => edge.to));
-        const rootNodes = allNodes.filter(
-          (node) => !nodesWithParents.has(node.id)
-        );
-
-        // Clear current collapsed state
         collapsedNodes.clear();
-
-        // For each root node, find its direct children and collapse their subtrees
         rootNodes.forEach((rootNode) => {
-          const directChildren = getChildrenOfNode(rootNode.id);
-
-          // For each direct child, collapse all its descendants
-          directChildren.forEach((childId) => {
-            const grandchildren = getAllDescendants(childId);
-            grandchildren.forEach((descendantId) => {
-              collapsedNodes.add(descendantId);
-            });
+          getChildrenOfNode(rootNode.id).forEach((childId) => {
+            getAllDescendants(childId).forEach((id) => collapsedNodes.add(id));
           });
         });
 
         updateVisibleNodesAndEdges();
         updateStats();
-
-        // Fit the network
-        if (network) {
-          setTimeout(() => network.fit(), 100);
-        }
+        if (network) setTimeout(() => network.fit(), 100);
       }
 
-      /**
-       * Toggles the collapsed state of a node and its subtree.
-       * @param {string} nodeId - The ID of the node to toggle.
-       */
       function toggleNodeCollapse(nodeId) {
-        if (collapsedNodes.has(nodeId)) {
-          // Expand: remove from collapsed set and show children
-          expandNode(nodeId);
-        } else {
-          // Collapse: add to collapsed set and hide children
-          collapseNode(nodeId);
-        }
-
+        collapsedNodes.has(nodeId) ? expandNode(nodeId) : collapseNode(nodeId);
         updateVisibleNodesAndEdges();
         updateStats();
       }
 
-      /**
-       * Expands a specific node by removing it from collapsed set.
-       * @param {string} nodeId - The ID of the node to expand.
-       */
       function expandNode(nodeId) {
         collapsedNodes.delete(nodeId);
-
-        // Also expand any children that were collapsed due to this node
-        const childrenToExpand = getChildrenOfNode(nodeId);
-        childrenToExpand.forEach((childId) => {
-          collapsedNodes.delete(childId);
-        });
+        getChildrenOfNode(nodeId).forEach((id) => collapsedNodes.delete(id));
       }
 
-      /**
-       * Collapses a specific node by adding it and its children to collapsed set.
-       * @param {string} nodeId - The ID of the node to collapse.
-       */
       function collapseNode(nodeId) {
-        const childrenToCollapse = getAllDescendants(nodeId);
-        childrenToCollapse.forEach((childId) => {
-          collapsedNodes.add(childId);
-        });
+        getAllDescendants(nodeId).forEach((id) => collapsedNodes.add(id));
       }
 
-      /**
-       * Gets all direct children of a node.
-       * @param {string} nodeId - The parent node ID.
-       * @returns {Array} Array of child node IDs.
-       */
       function getChildrenOfNode(nodeId) {
-        return originalEdges
-          .get({
-            filter: (edge) => edge.from === nodeId,
-          })
-          .map((edge) => edge.to);
+        return originalEdges.get({ filter: (e) => e.from === nodeId }).map((e) => e.to);
       }
 
-      /**
-       * Gets all descendants of a node (children, grandchildren, etc.).
-       * @param {string} nodeId - The parent node ID.
-       * @returns {Array} Array of all descendant node IDs.
-       */
       function getAllDescendants(nodeId) {
-        const descendants = [];
         const children = getChildrenOfNode(nodeId);
-
-        children.forEach((childId) => {
-          descendants.push(childId);
-          descendants.push(...getAllDescendants(childId));
-        });
-
-        return descendants;
+        return children.flatMap((childId) => [childId, ...getAllDescendants(childId)]);
       }
 
-      /**
-       * Updates the visible nodes and edges based on collapsed state.
-       */
       function updateVisibleNodesAndEdges() {
-        const allNodes = originalNodes.get();
-        const allEdges = originalEdges.get();
-
-        // Filter out collapsed nodes
-        const visibleNodes = allNodes.filter(
-          (node) => !collapsedNodes.has(node.id)
-        );
-
-        // Filter out edges that connect to or from collapsed nodes
-        const visibleEdges = allEdges.filter(
-          (edge) =>
-            !collapsedNodes.has(edge.from) && !collapsedNodes.has(edge.to)
-        );
-
-        // Update the datasets
+        const visibleNodes = originalNodes.get().filter((n) => !collapsedNodes.has(n.id));
+        const visibleEdges = originalEdges
+          .get()
+          .filter((e) => !collapsedNodes.has(e.from) && !collapsedNodes.has(e.to));
         nodes.clear();
         edges.clear();
         nodes.update(visibleNodes);
         edges.update(visibleEdges);
-
-        // Update visual indicators for nodes that have collapsed children
         updateCollapsedIndicators();
       }
 
-      /**
-       * Updates visual indicators for nodes that have collapsed children.
-       */
       function updateCollapsedIndicators() {
-        const visibleNodes = nodes.get();
-        const updates = [];
-
-        visibleNodes.forEach((node) => {
-          const hasCollapsedChildren = getChildrenOfNode(node.id).some(
-            (childId) => collapsedNodes.has(childId)
-          );
-
-          if (hasCollapsedChildren) {
-            // Mark nodes with collapsed children differently
-            updates.push({
+        const updates = nodes.get().map((node) => {
+          const hasCollapsed = getChildrenOfNode(node.id).some((id) => collapsedNodes.has(id));
+          if (hasCollapsed) {
+            return {
               id: node.id,
-              color: {
-                background: colorPalette.nodeBorder,
-                border: colorPalette.nodeDefault,
-              },
-              label: node.label + " [+]",
-            });
-          } else {
-            // Reset to normal appearance
-            updates.push({
-              id: node.id,
-              color: {
-                background: colorPalette.nodeDefault,
-                border: colorPalette.nodeBorder,
-              },
-              label: node.originalData
-                ? String(node.originalData.label)
-                : node.label.replace(" [+]", ""),
-            });
+              color: { background: colorPalette.nodeBorder, border: colorPalette.nodeDefault },
+              label: node.label.replace(' [+]', '') + ' [+]',
+            };
           }
+          return {
+            id: node.id,
+            color: { background: colorPalette.nodeDefault, border: colorPalette.nodeBorder },
+            label: node.originalData
+              ? String(node.originalData.label)
+              : node.label.replace(' [+]', ''),
+          };
         });
-
-        if (updates.length > 0) {
-          nodes.update(updates);
-        }
+        if (updates.length > 0) nodes.update(updates);
       }
 
-      /**
-       * Handles node clicks to highlight the selection and its direct relatives.
-       */
+      // ----- Click / Info ----- //
       function handleNodeClick(params) {
         resetColors();
         hideConnectedNodes();
 
         if (params.nodes.length > 0) {
           const selectedNodeId = params.nodes[0];
-
           nodes.update({
             id: selectedNodeId,
             color: {
@@ -572,156 +405,128 @@
         }
       }
 
-      /**
-       * Handles double-clicks on nodes to toggle collapse/expand.
-       */
       function handleNodeDoubleClick(params) {
-        if (params.nodes.length > 0) {
-          const nodeId = params.nodes[0];
-          toggleNodeCollapse(nodeId);
-        }
+        if (params.nodes.length > 0) toggleNodeCollapse(params.nodes[0]);
       }
 
-      /**
-       * Displays information about the selected node, including parent/child count.
-       */
       function showNodeInfo(nodeData) {
-        const infoDiv = document.getElementById("node-info");
-        const detailsDiv = document.getElementById("node-details");
+        const infoDiv = document.getElementById('node-info');
+        const detailsDiv = document.getElementById('node-details');
+        const allEdges = originalEdges.get();
+        const children = allEdges.filter((e) => e.from === nodeData.id).length;
+        const parents = allEdges.filter((e) => e.to === nodeData.id).length;
 
-        const allEdges = originalEdges.get(); // Use original edges for accurate count
-        const children = allEdges.filter(
-          (edge) => edge.from === nodeData.id
-        ).length;
-        const parents = allEdges.filter(
-          (edge) => edge.to === nodeData.id
-        ).length;
         const isCollapsed = collapsedNodes.has(nodeData.id);
-        const hasCollapsedChildren = getChildrenOfNode(nodeData.id).some(
-          (childId) => collapsedNodes.has(childId)
+        const hasCollapsedKids = getChildrenOfNode(nodeData.id).some((id) =>
+          collapsedNodes.has(id)
         );
+        const status = isCollapsed
+          ? 'Collapsed'
+          : hasCollapsedKids
+            ? 'Has hidden children'
+            : 'Visible';
 
-        let statusInfo = "";
-        if (isCollapsed) {
-          statusInfo = "<br><strong>Status:</strong> Collapsed";
-        } else if (hasCollapsedChildren) {
-          statusInfo = "<br><strong>Status:</strong> Has collapsed children";
-        }
+        const cleanLabel = nodeData.label.replace(' [+]', '');
+        const addr = nodeData.originalData ? nodeData.originalData.address : nodeData.id;
 
-        detailsDiv.innerHTML = `<strong>Label:</strong> ${nodeData.label.replace(
-          " [+]",
-          ""
-        )}<br><strong>ID:</strong> ${
-          nodeData.originalData.address
-        }<br><strong>Children:</strong> ${children}<br><strong>Parents:</strong> ${parents}${statusInfo}<br><em>Double-click to toggle collapse</em>`;
-        infoDiv.style.display = "block";
+        detailsDiv.innerHTML =
+          createStatRow('Label', cleanLabel) +
+          createStatRow('Address', createAddressChip(addr)) +
+          createStatRow('Children', children) +
+          createStatRow('Parents', parents) +
+          createStatRow('Status', status) +
+          `<div class="hint-text">Double-click to toggle collapse</div>`;
+        infoDiv.style.display = 'block';
       }
 
-      /**
-       * Shows connected nodes information (parents and children).
-       * @param {string} selectedNodeId - The ID of the selected node.
-       */
       function showConnectedNodes(selectedNodeId) {
-        const connectedDiv = document.getElementById("connected-nodes");
-        const listDiv = document.getElementById("connected-list");
-
+        const connectedDiv = document.getElementById('connected-nodes');
+        const listDiv = document.getElementById('connected-list');
         const allEdges = originalEdges.get();
 
-        // Get parents and children
-        const parentEdges = allEdges.filter(
-          (edge) => edge.to === selectedNodeId
-        );
-        const childEdges = allEdges.filter(
-          (edge) => edge.from === selectedNodeId
-        );
+        const parentEdges = allEdges.filter((e) => e.to === selectedNodeId);
+        const childEdges = allEdges.filter((e) => e.from === selectedNodeId);
 
-        let html = "";
+        let html = '';
 
         if (parentEdges.length > 0) {
-          html += "<strong>Parents:</strong><br>";
+          html += `<div class="rel-group-label">Parents</div>`;
           parentEdges.forEach((edge) => {
-            const parentNode = originalNodes.get(edge.from);
-            html += `↑ ${parentNode.label} (ID: ${parentNode.originalData.address})<br>`;
+            const pNode = originalNodes.get(edge.from);
+            const label = pNode ? pNode.label.replace(' [+]', '') : edge.from;
+            html += createNodeChip('↑', label);
           });
         }
 
         if (childEdges.length > 0) {
-          if (html) html += "<br>";
-          html += "<strong>Children:</strong><br>";
+          if (html) html += `<div style="margin-top:8px"></div>`;
+          html += `<div class="rel-group-label">Children</div>`;
           childEdges.forEach((edge) => {
-            const childNode = originalNodes.get(edge.to);
-            const isCollapsed = collapsedNodes.has(childNode.id);
-            const status = isCollapsed ? " [Collapsed]" : "";
-            html += `↓ ${childNode.label} (ID: ${childNode.originalData.address})${status}<br>`;
+            const cNode = originalNodes.get(edge.to);
+            const label = cNode ? cNode.label.replace(' [+]', '') : edge.to;
+            const isCollapsed = cNode ? collapsedNodes.has(cNode.id) : false;
+            const extra = isCollapsed ? `<span class="collapsed-badge">Collapsed</span>` : '';
+            html += createNodeChip('↓', label, extra);
           });
         }
 
-        if (!html) {
-          html = "<em>No parent or child nodes</em>";
-        }
-
+        if (!html) html = `<em class="hint-text">No parent or child nodes</em>`;
         listDiv.innerHTML = html;
-        connectedDiv.style.display = "block";
+        connectedDiv.style.display = 'block';
       }
 
-      /**
-       * Hides the connected nodes section.
-       */
       function hideConnectedNodes() {
-        const connectedDiv = document.getElementById("connected-nodes");
-        if (connectedDiv) {
-          connectedDiv.style.display = "none";
-        }
+        const el = document.getElementById('connected-nodes');
+        if (el) el.style.display = 'none';
       }
 
-      /**
-       * Updates the statistics panel with tree-specific metrics.
-       */
+      // ----- Statistics ----- //
       function updateStats() {
-        const statsDiv = document.getElementById("tree-stats");
+        const statsDiv = document.getElementById('tree-stats');
         const visibleNodes = nodes.get();
         const visibleEdges = edges.get();
         const totalNodes = originalNodes.length;
         const totalEdges = originalEdges.length;
-
         const nodeCount = visibleNodes.length;
         const edgeCount = visibleEdges.length;
         const collapsedCount = collapsedNodes.size;
 
         const allFromNodes = new Set(visibleEdges.map((e) => e.from));
         const allToNodes = new Set(visibleEdges.map((e) => e.to));
-
-        const rootNodes = visibleNodes.filter(
-          (n) => !allToNodes.has(n.id)
-        ).length;
-        const leafNodes = visibleNodes.filter(
-          (n) => !allFromNodes.has(n.id)
-        ).length;
+        const rootNodes = visibleNodes.filter((n) => !allToNodes.has(n.id)).length;
+        const leafNodes = visibleNodes.filter((n) => !allFromNodes.has(n.id)).length;
         const avgBranching =
           nodeCount - rootNodes > 0
-            ? (edgeCount / (nodeCount - leafNodes)).toFixed(2)
-            : 0;
+            ? (edgeCount / Math.max(1, nodeCount - leafNodes)).toFixed(2)
+            : '0.00';
 
-        statsDiv.innerHTML = `<strong>Visible:</strong> ${nodeCount}/${totalNodes} nodes<br><strong>Edges:</strong> ${edgeCount}/${totalEdges}<br><strong>Collapsed:</strong> ${collapsedCount}<br><strong>Root Nodes:</strong> ${rootNodes}<br><strong>Leaf Nodes:</strong> ${leafNodes}<br><strong>Avg Branching:</strong> ${avgBranching}<br><strong>Layout:</strong> ${currentLayout}`;
+        statsDiv.innerHTML =
+          createStatRow('Nodes', `${nodeCount} / ${totalNodes}`) +
+          createStatRow('Edges', `${edgeCount} / ${totalEdges}`) +
+          createStatRow('Collapsed', collapsedCount) +
+          createStatRow('Root Nodes', rootNodes) +
+          createStatRow('Leaf Nodes', leafNodes) +
+          createStatRow('Avg Branching', avgBranching) +
+          createStatRow('Layout', currentLayout);
       }
 
-      /**
-       * Prepares tree data and calls the shared JSON export function.
-       */
+      // ----- JSON export ----- //
       function customExportJSON() {
-        const treeData = {
-          nodes: originalNodes.get(), // Export original data
-          edges: originalEdges.get(),
-          visibleNodes: nodes.get(),
-          visibleEdges: edges.get(),
-          collapsedNodes: Array.from(collapsedNodes),
-          layout: currentLayout,
-          timestamp: new Date().toISOString(),
-        };
-        exportJSON(treeData, "tree-data.json");
+        exportJSON(
+          {
+            nodes: originalNodes.get(),
+            edges: originalEdges.get(),
+            visibleNodes: nodes.get(),
+            visibleEdges: edges.get(),
+            collapsedNodes: Array.from(collapsedNodes),
+            layout: currentLayout,
+            timestamp: new Date().toISOString(),
+          },
+          'tree-data.json'
+        );
       }
 
-      // ----- Initialisation ----- //
+      // ----- Init ----- //
       createNetwork(currentLayout);
     </script>
   </body>

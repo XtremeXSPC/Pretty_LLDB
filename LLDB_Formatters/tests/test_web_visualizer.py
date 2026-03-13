@@ -1,8 +1,11 @@
 import unittest
+from unittest.mock import patch
 
 from LLDB_Formatters.config import g_config
+from LLDB_Formatters.extraction import extract_linear_structure
 from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
 from LLDB_Formatters.web_visualizer import (
+    _generate_html,
     generate_graph_visualization_html,
     generate_list_visualization_html,
     generate_tree_visualization_html,
@@ -139,6 +142,37 @@ class TestWebVisualizer(unittest.TestCase):
         self.assertIsNotNone(html)
         self.assertIn("const isDirected = false;", html)
         self.assertIn("<th>Mode</th><td>Undirected</td>", html)
+
+    def test_tree_visualization_html_escapes_variable_and_type_names(self):
+        tree_value = _make_tree()
+        tree_value._name = 'tree<script>alert("x")</script>'
+        tree_value._type_name = 'MyBinaryTree<Foo<int> & "quoted">'
+
+        html = generate_tree_visualization_html(tree_value)
+
+        self.assertIsNotNone(html)
+        self.assertIn("tree&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;", html)
+        self.assertIn("MyBinaryTree&lt;Foo&lt;int&gt; &amp; &quot;quoted&quot;&gt;", html)
+        self.assertNotIn('tree<script>alert("x")</script>', html)
+
+    def test_generate_html_reports_unreplaced_placeholders(self):
+        html = _generate_html("tree_visualizer.html", {"__NODES_DATA__": "[]"})
+
+        self.assertIn("unreplaced placeholders", html)
+        self.assertIn("__EDGES_DATA__", html)
+
+    def test_generate_list_visualization_html_can_reuse_pre_extracted_data(self):
+        list_value = _make_list_with_cycle_and_prev()
+        extraction = extract_linear_structure(list_value)
+
+        with patch(
+            "LLDB_Formatters.web_visualizer.extract_linear_structure",
+            side_effect=AssertionError("unexpected second extraction"),
+        ):
+            html = generate_list_visualization_html(list_value, extracted_list=extraction)
+
+        self.assertIsNotNone(html)
+        self.assertIn('"kind": "cycle"', html)
 
 
 if __name__ == "__main__":

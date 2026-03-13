@@ -1,91 +1,71 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <title>Interactive List Visualizer</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pretty LLDB — List Visualizer</title>
     <style>
-      /* Injected styles start */
-      __SHARED_CSS__
-      /* Injected styles end */
-  
-      /* Fallback/base styles to maintain syntax highlighting */
-      body {
+      __SHARED_CSS__ body {
         padding: 0;
         margin: 0;
       }
     </style>
   </head>
   <body>
-    <!-- UI Controls -->
     <button
       id="toggle-info-btn"
       onclick="toggleInfoBox()"
-      title="Toggle Info Panel"
+      title="Show Info Panel"
+      aria-label="Toggle list controls"
     >
-      ⚙️
+      ⚙
     </button>
 
-    <div id="info-box" class="hidden">
-      <h3>List Controls</h3>
+    <div id="info-box" class="hidden" role="complementary" aria-label="List controls">
+      <!-- Gradient accent bar -->
+      <div class="panel-accent panel-accent--list"></div>
 
-      <div class="theme-controls">
-        <button id="theme-toggle-btn" onclick="toggleTheme()">
-          Switch to Light Theme
-        </button>
+      <!-- Header -->
+      <div class="panel-header">
+        <div class="panel-header-left">
+          <span class="panel-title">List Visualizer</span>
+          <span class="panel-badge panel-badge--list">LIST</span>
+        </div>
+        <button id="theme-toggle-btn" class="icon-btn" onclick="toggleTheme()"></button>
       </div>
 
-      <div class="stats-display type-info-display">
-        __TYPE_INFO_HTML__
-      </div>
+      <!-- Type info injected by Python -->
+      <div class="stats-display type-info-display">__TYPE_INFO_HTML__</div>
 
       <!-- View Operations -->
       <div class="controls-section">
-        <div class="section-title">View Operations</div>
+        <div class="section-title">View</div>
         <div class="button-group">
-          <button id="btn-center" class="button" onclick="centerView()">
-            Center
-          </button>
-          <button id="btn-clear" class="button" onclick="clearSelection()">
-            Clear
-          </button>
+          <button id="btn-center" class="button" onclick="centerView()">Center</button>
+          <button id="btn-clear" class="button" onclick="clearSelection()">Clear</button>
         </div>
       </div>
 
-      <!-- Layout Controls -->
+      <!-- Layout -->
       <div class="controls-section layout-controls">
         <div class="section-title">Layout</div>
         <div class="button-group">
-          <button
-            class="button active"
-            onclick="setLayout('hierarchical')"
-            id="hierarchical-btn"
-          >
+          <button class="button active" onclick="setLayout('hierarchical')" id="hierarchical-btn">
             Horizontal
           </button>
-          <button
-            class="button"
-            onclick="setLayout('vertical')"
-            id="vertical-btn"
-          >
-            Vertical
-          </button>
-          <button class="button" onclick="setLayout('radial')" id="radial-btn">
-            Radial
-          </button>
+          <button class="button" onclick="setLayout('vertical')" id="vertical-btn">Vertical</button>
+          <button class="button" onclick="setLayout('radial')" id="radial-btn">Radial</button>
         </div>
       </div>
 
-      <!-- Animation Controls -->
+      <!-- Animation -->
       <div class="controls-section animation-controls">
         <div class="section-title">Animation</div>
-        <button
-          id="btn-play"
-          class="button play-button"
-          onclick="playAnimation()"
-        >
+        <button id="btn-play" class="button play-button" onclick="playAnimation()">
           Play Traversal
         </button>
         <div class="speed-control">
-          <span>Speed:</span>
+          <span>Speed</span>
           <input
             type="range"
             id="speed-slider"
@@ -98,41 +78,36 @@
           <span id="speed-value">400ms</span>
         </div>
         <div class="button-group">
-          <button id="btn-pause" class="button" onclick="pauseAnimation()">
-            Pause
-          </button>
-          <button id="btn-stop" class="button" onclick="stopAnimation()">
-            Stop
-          </button>
-          <button id="btn-step" class="button" onclick="stepAnimation()">
-            Step
-          </button>
+          <button id="btn-pause" class="button" onclick="pauseAnimation()">Pause</button>
+          <button id="btn-stop" class="button" onclick="stopAnimation()">Stop</button>
+          <button id="btn-step" class="button" onclick="stepAnimation()">Step</button>
         </div>
       </div>
 
-      <!-- Search Controls -->
+      <!-- Search -->
       <div class="controls-section search-controls">
-        <div class="section-title">Search & Highlight</div>
+        <div class="section-title">Search</div>
         <input
           type="text"
           class="search-box"
           id="search-input"
-          placeholder="Search node values..."
+          placeholder="Search node values…"
+          autocomplete="off"
+          spellcheck="false"
           oninput="searchNodes(this.value)"
         />
         <div class="button-group" style="margin-top: 8px">
-          <button class="button" onclick="clearHighlights()">
-            Clear Search
-          </button>
+          <button class="button" onclick="clearHighlights()">Clear Search</button>
         </div>
       </div>
 
-      <!-- Statistics and Node Info -->
+      <!-- Statistics -->
       <div class="stats-display" id="stats-display">
-        <div class="section-title">List Statistics</div>
+        <div class="section-title">Statistics</div>
         <div id="list-stats"></div>
       </div>
 
+      <!-- Selected node info -->
       <div class="node-info" id="node-info" style="display: none">
         <div class="section-title">Selected Node</div>
         <div id="node-details"></div>
@@ -142,45 +117,44 @@
       <div class="legend">
         <div class="section-title">Legend</div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #7aa2f7"></div>
+          <div class="legend-color" style="background: #7aa2f7"></div>
           <span>Normal</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #9ece6a"></div>
-          <span>Current/Animated</span>
+          <div class="legend-color" style="background: #9ece6a"></div>
+          <span>Animated</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #e0af68"></div>
+          <div class="legend-color" style="background: #e0af68"></div>
           <span>Highlighted</span>
         </div>
         <div class="legend-item">
-          <div class="legend-color" style="background-color: #f7768e"></div>
+          <div class="legend-color" style="background: #f7768e"></div>
           <span>Search Result</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #f7768e; opacity: 0.6"></div>
+          <span>Cycle Edge</span>
         </div>
       </div>
 
-      <!-- Export Controls -->
+      <!-- Export -->
       <div class="controls-section export-controls">
         <div class="section-title">Export</div>
         <div class="button-group">
           <button id="btn-png" class="button" onclick="exportPNG()">PNG</button>
-          <button id="btn-json" class="button" onclick="customExportJSON()">
-            JSON
-          </button>
+          <button id="btn-json" class="button" onclick="customExportJSON()">JSON</button>
         </div>
       </div>
     </div>
+    <!-- /#info-box -->
 
-    <!-- Vis.js Container -->
     <div id="mynetwork"></div>
 
-    <!-- Scripts -->
     <script type="text/javascript">
-      // Include the vis.js library
       __VISJS_LIBRARY__;
     </script>
     <script type="text/javascript">
-      // Common JS functions will be injected here by Python
       __SHARED_JS__;
     </script>
     <script type="text/javascript">
@@ -191,9 +165,9 @@
       const isDoublyLinked = __IS_DOUBLY_LINKED__;
       const cycleDetected = __CYCLE_DETECTED__;
 
-      // ----- Vis.js & Animation State Setup ----- //
+      // ----- State ----- //
       let network;
-      let currentLayout = "hierarchical";
+      let currentLayout = 'hierarchical';
       let animationState = {
         isPlaying: false,
         isPaused: false,
@@ -202,15 +176,16 @@
         speed: 400,
       };
 
-      // Process raw data
+      // ----- Process data into vis.js format ----- //
       const processedNodes = rawNodesData.map((node) => ({
         id: node.id,
         label: String(node.value || node.label),
-        address: `${node.address || node.id}`,
+        address: String(node.address || node.id),
       }));
+
       const processedEdges = rawEdgesData.map((edge) => {
-        const isPrev = edge.kind === "prev";
-        const isCycle = edge.kind === "cycle";
+        const isPrev = edge.kind === 'prev';
+        const isCycle = edge.kind === 'cycle';
         return {
           ...edge,
           arrows: { to: { enabled: true, scaleFactor: isPrev ? 0.75 : 1 } },
@@ -220,36 +195,36 @@
             color: isCycle
               ? colorPalette.red
               : isPrev
-              ? colorPalette.edgeSelected
-              : colorPalette.edgeDefault,
+                ? colorPalette.edgeSelected
+                : colorPalette.edgeDefault,
             highlight: isCycle
               ? colorPalette.red
               : isPrev
-              ? colorPalette.edgeSelected
-              : colorPalette.edgeSelected,
+                ? colorPalette.edgeSelected
+                : colorPalette.edgeSelected,
             inherit: false,
           },
           smooth: isCycle
-            ? { type: "curvedCW", roundness: 0.35 }
+            ? { type: 'curvedCW', roundness: 0.35 }
             : isPrev
-            ? { type: "curvedCCW", roundness: 0.2 }
-            : false,
+              ? { type: 'curvedCCW', roundness: 0.2 }
+              : false,
         };
       });
 
       const nodes = new vis.DataSet(processedNodes);
       const edges = new vis.DataSet(processedEdges);
       const data = { nodes, edges };
-      const container = document.getElementById("mynetwork");
+      const container = document.getElementById('mynetwork');
 
-      // ----- Layout & Base Options ----- //
+      // ----- Layout configurations ----- //
       const layoutConfigs = {
         hierarchical: {
           layout: {
             hierarchical: {
               enabled: true,
-              direction: "LR",
-              sortMethod: "directed",
+              direction: 'LR',
+              sortMethod: 'directed',
               nodeSpacing: 100,
               levelSeparation: 150,
             },
@@ -260,8 +235,8 @@
           layout: {
             hierarchical: {
               enabled: true,
-              direction: "UD",
-              sortMethod: "directed",
+              direction: 'UD',
+              sortMethod: 'directed',
               nodeSpacing: 100,
               levelSeparation: 120,
             },
@@ -272,31 +247,18 @@
           layout: { randomSeed: 2 },
           physics: {
             enabled: true,
-            barnesHut: {
-              gravitationalConstant: -5000,
-              centralGravity: 0.25,
-              springLength: 120,
-            },
+            barnesHut: { gravitationalConstant: -5000, centralGravity: 0.25, springLength: 120 },
           },
         },
       };
 
       const baseOptions = {
-        interaction: {
-          hover: true,
-          tooltipDelay: 200,
-          selectConnectedEdges: false,
-        },
+        interaction: { hover: true, tooltipDelay: 200, selectConnectedEdges: false },
         nodes: {
-          shape: "box",
+          shape: 'box',
           shapeProperties: { borderRadius: 6 },
           margin: 12,
-          font: {
-            color: colorPalette.textDefault,
-            size: 16,
-            face: "arial",
-            bold: { color: colorPalette.textDefault },
-          },
+          font: { color: colorPalette.textDefault, size: 15, face: 'arial' },
           borderWidth: 2,
           color: {
             border: colorPalette.nodeBorder,
@@ -305,18 +267,9 @@
               border: colorPalette.nodeSelectedBorder,
               background: colorPalette.nodeSelected,
             },
-            hover: {
-              border: colorPalette.nodeHover,
-              background: colorPalette.nodeHover,
-            },
+            hover: { border: colorPalette.nodeHover, background: colorPalette.nodeHover },
           },
-          shadow: {
-            enabled: true,
-            color: "rgba(0, 0, 0, 0.5)",
-            size: 20,
-            x: 5,
-            y: 5,
-          },
+          shadow: { enabled: true, color: 'rgba(0,0,0,0.45)', size: 18, x: 4, y: 4 },
         },
         edges: {
           width: 2,
@@ -325,195 +278,122 @@
             highlight: colorPalette.edgeSelected,
             inherit: false,
           },
-          smooth: {
-            type: "cubicBezier",
-            forceDirection: "horizontal",
-            roundness: 0.4,
-          },
+          smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 },
         },
       };
 
-      // ----- List-Specific & Animation Functions ----- //
-
-      /**
-       * Creates or recreates the network with a specified layout.
-       * @param {string} layoutType - The key for the layout configuration.
-       */
+      // ----- Network creation ----- //
       function createNetwork(layoutType) {
         const options = { ...baseOptions, ...layoutConfigs[layoutType] };
         if (network) network.destroy();
         network = new vis.Network(container, data, options);
-
-        // Attach event listeners
-        network.on("click", handleNodeClick);
-        network.on("hoverNode", handleNodeHover);
-        network.on("blurNode", handleNodeBlur);
-        network.on("stabilizationIterationsDone", updateStats);
-        updateStats(); // Initial call
+        network.on('click', handleNodeClick);
+        network.on('hoverNode', handleNodeHover);
+        network.on('blurNode', handleNodeBlur);
+        network.on('stabilizationIterationsDone', updateStats);
+        updateStats();
       }
 
-      /**
-       * Changes the network layout and recreates the visualization.
-       * @param {string} layoutType - The new layout to apply.
-       */
       function setLayout(layoutType) {
         currentLayout = layoutType;
         document
-          .querySelectorAll(".layout-controls button")
-          .forEach((btn) => btn.classList.remove("active"));
-        document.getElementById(`${layoutType}-btn`).classList.add("active");
+          .querySelectorAll('.layout-controls button')
+          .forEach((btn) => btn.classList.remove('active'));
+        document.getElementById(`${layoutType}-btn`).classList.add('active');
         createNetwork(layoutType);
       }
 
-      /**
-       * Updates the animation speed from the slider.
-       */
+      // ----- Animation ----- //
       function updateSpeed(value) {
         animationState.speed = parseInt(value, 10);
-        document.getElementById(
-          "speed-value"
-        ).textContent = `${animationState.speed}ms`;
+        document.getElementById('speed-value').textContent = `${animationState.speed}ms`;
       }
 
-      /**
-       * Starts or resumes the traversal animation.
-       */
       function playAnimation() {
-        if (!traversalOrder || traversalOrder.length === 0) {
-          console.warn("No traversal order available for animation");
-          return;
-        }
-
+        if (!traversalOrder || traversalOrder.length === 0) return;
         if (animationState.isPlaying) return;
-
         if (animationState.isPaused) {
           resumeAnimation();
           return;
         }
 
-        stopAnimation(); // Reset before starting
+        stopAnimation();
         animationState.isPlaying = true;
-        const playBtn = document.getElementById("btn-play");
-        if (playBtn) {
-          playBtn.innerHTML = `<span class="button-icon">${svgIcons.pause}</span> Pause`;
-        }
+        const playBtn = document.getElementById('btn-play');
+        if (playBtn) playBtn.innerHTML = `<span class="button-icon">${svgIcons.pause}</span> Pause`;
 
         const animateStep = (index) => {
           if (!animationState.isPlaying || index >= traversalOrder.length) {
             if (index >= traversalOrder.length) stopAnimation();
             return;
           }
-
-          const nodeId = traversalOrder[index];
           nodes.update({
-            id: nodeId,
+            id: traversalOrder[index],
             color: {
               background: colorPalette.nodeAnimated,
               border: colorPalette.nodeAnimatedBorder,
             },
           });
-
           if (index > 0) {
-            const prevNodeId = traversalOrder[index - 1];
             nodes.update({
-              id: prevNodeId,
-              color: {
-                background: colorPalette.nodeDefault,
-                border: colorPalette.nodeBorder,
-              },
+              id: traversalOrder[index - 1],
+              color: { background: colorPalette.nodeDefault, border: colorPalette.nodeBorder },
             });
           }
-
           animationState.currentStep = index;
-          const timeoutId = setTimeout(
-            () => animateStep(index + 1),
-            animationState.speed
+          animationState.timeouts.push(
+            setTimeout(() => animateStep(index + 1), animationState.speed)
           );
-          animationState.timeouts.push(timeoutId);
         };
-
         animateStep(0);
       }
 
-      /**
-       * Pauses the current animation.
-       */
       function pauseAnimation() {
         if (!animationState.isPlaying) return;
-
         animationState.isPaused = true;
         animationState.isPlaying = false;
         animationState.timeouts.forEach(clearTimeout);
         animationState.timeouts = [];
-
-        const playBtn = document.getElementById("btn-play");
-        if (playBtn) {
-          playBtn.innerHTML = `<span class="button-icon">${svgIcons.play}</span> Resume`;
-        }
+        const playBtn = document.getElementById('btn-play');
+        if (playBtn) playBtn.innerHTML = `<span class="button-icon">${svgIcons.play}</span> Resume`;
       }
 
-      /**
-       * Resumes the paused animation.
-       */
       function resumeAnimation() {
         if (!traversalOrder || traversalOrder.length === 0) return;
-
         animationState.isPaused = false;
         animationState.isPlaying = true;
-
-        const playBtn = document.getElementById("btn-play");
-        if (playBtn) {
-          playBtn.innerHTML = `<span class="button-icon">${svgIcons.pause}</span> Pause`;
-        }
-
+        const playBtn = document.getElementById('btn-play');
+        if (playBtn) playBtn.innerHTML = `<span class="button-icon">${svgIcons.pause}</span> Pause`;
         playAnimationFromStep(animationState.currentStep + 1);
       }
 
-      /**
-       * Continues animation from a specific step.
-       * @param {number} startIndex - The step index to start from.
-       */
       function playAnimationFromStep(startIndex) {
         const animateStep = (index) => {
           if (!animationState.isPlaying || index >= traversalOrder.length) {
             if (index >= traversalOrder.length) stopAnimation();
             return;
           }
-
-          const nodeId = traversalOrder[index];
           nodes.update({
-            id: nodeId,
+            id: traversalOrder[index],
             color: {
               background: colorPalette.nodeAnimated,
               border: colorPalette.nodeAnimatedBorder,
             },
           });
-
           if (index > 0) {
-            const prevNodeId = traversalOrder[index - 1];
             nodes.update({
-              id: prevNodeId,
-              color: {
-                background: colorPalette.nodeDefault,
-                border: colorPalette.nodeBorder,
-              },
+              id: traversalOrder[index - 1],
+              color: { background: colorPalette.nodeDefault, border: colorPalette.nodeBorder },
             });
           }
-
           animationState.currentStep = index;
-          const timeoutId = setTimeout(
-            () => animateStep(index + 1),
-            animationState.speed
+          animationState.timeouts.push(
+            setTimeout(() => animateStep(index + 1), animationState.speed)
           );
-          animationState.timeouts.push(timeoutId);
         };
-
         animateStep(startIndex);
       }
 
-      /**
-       * Stops the animation and resets all states.
-       */
       function stopAnimation() {
         animationState.isPlaying = false;
         animationState.isPaused = false;
@@ -521,39 +401,24 @@
         animationState.timeouts = [];
         animationState.currentStep = 0;
         resetColors();
-
-        const playBtn = document.getElementById("btn-play");
-        if (playBtn) {
+        const playBtn = document.getElementById('btn-play');
+        if (playBtn)
           playBtn.innerHTML = `<span class="button-icon">${svgIcons.play}</span> Play Traversal`;
-        }
       }
 
-      /**
-       * Steps through the animation one node at a time.
-       */
       function stepAnimation() {
         if (!traversalOrder || traversalOrder.length === 0) return;
         if (animationState.isPlaying || animationState.isPaused) return;
-
-        resetColors(); // Clear previous steps
-        if (animationState.currentStep >= traversalOrder.length) {
-          animationState.currentStep = 0; // Loop back
-        }
-
-        const nodeId = traversalOrder[animationState.currentStep];
+        resetColors();
+        if (animationState.currentStep >= traversalOrder.length) animationState.currentStep = 0;
         nodes.update({
-          id: nodeId,
-          color: {
-            background: colorPalette.nodeAnimated,
-            border: colorPalette.nodeAnimatedBorder,
-          },
+          id: traversalOrder[animationState.currentStep],
+          color: { background: colorPalette.nodeAnimated, border: colorPalette.nodeAnimatedBorder },
         });
         animationState.currentStep++;
       }
 
-      /**
-       * Handles node clicks to show information.
-       */
+      // ----- Click / Info ----- //
       function handleNodeClick(params) {
         if (params.nodes.length > 0) {
           const nodeId = params.nodes[0];
@@ -564,49 +429,50 @@
         }
       }
 
-      /**
-       * Displays information for the selected list node.
-       */
       function showNodeInfo(nodeData) {
-        const infoDiv = document.getElementById("node-info");
-        const detailsDiv = document.getElementById("node-details");
-        detailsDiv.innerHTML = `<strong>Value:</strong> ${nodeData.label}<br><strong>ID:</strong> ${nodeData.id}<br><strong>Address:</strong> ${nodeData.address}`;
-        infoDiv.style.display = "block";
+        const infoDiv = document.getElementById('node-info');
+        const detailsDiv = document.getElementById('node-details');
+        detailsDiv.innerHTML =
+          createStatRow('Value', nodeData.label) +
+          createStatRow('Address', createAddressChip(nodeData.address));
+        infoDiv.style.display = 'block';
       }
 
-      /**
-       * Updates the statistics panel for the list.
-       */
+      // ----- Statistics ----- //
       function updateStats() {
-        const statsDiv = document.getElementById("list-stats");
+        const statsDiv = document.getElementById('list-stats');
         const nodeCount = nodes.length;
-        const listType = isDoublyLinked ? "Doubly Linked" : "Singly Linked";
-        const nextEdges = rawEdgesData.filter((edge) => edge.kind === "next")
-          .length;
-        const prevEdges = rawEdgesData.filter((edge) => edge.kind === "prev")
-          .length;
-        const cycleEdges = rawEdgesData.filter((edge) => edge.kind === "cycle")
-          .length;
-        statsDiv.innerHTML = `<strong>Nodes:</strong> ${nodeCount}<br><strong>Type:</strong> ${listType}<br><strong>Forward Edges:</strong> ${nextEdges}<br><strong>Backward Edges:</strong> ${prevEdges}<br><strong>Cycle:</strong> ${cycleDetected ? "Yes" : "No"}${cycleEdges ? ` (${cycleEdges} edge)` : ""}<br><strong>Layout:</strong> ${currentLayout}`;
+        const listType = isDoublyLinked ? 'Doubly Linked' : 'Singly Linked';
+        const nextEdges = rawEdgesData.filter((e) => e.kind === 'next').length;
+        const prevEdges = rawEdgesData.filter((e) => e.kind === 'prev').length;
+        const cycleEdges = rawEdgesData.filter((e) => e.kind === 'cycle').length;
+        const cycleVal = cycleDetected ? `Yes${cycleEdges ? ` (${cycleEdges})` : ''}` : 'No';
+        statsDiv.innerHTML =
+          createStatRow('Nodes', nodeCount) +
+          createStatRow('Type', listType) +
+          createStatRow('Next Edges', nextEdges) +
+          createStatRow('Prev Edges', prevEdges) +
+          createStatRow('Cycle', cycleVal) +
+          createStatRow('Layout', currentLayout);
       }
 
-      /**
-       * Prepares list data and calls the shared JSON export function.
-       */
+      // ----- JSON export ----- //
       function customExportJSON() {
-        const listData = {
-          nodes: nodes.get(),
-          edges: edges.get(),
-          traversalOrder: traversalOrder,
-          isDoublyLinked: isDoublyLinked,
-          cycleDetected: cycleDetected,
-          layout: currentLayout,
-          timestamp: new Date().toISOString(),
-        };
-        exportJSON(listData, "list-data.json");
+        exportJSON(
+          {
+            nodes: nodes.get(),
+            edges: edges.get(),
+            traversalOrder: traversalOrder,
+            isDoublyLinked: isDoublyLinked,
+            cycleDetected: cycleDetected,
+            layout: currentLayout,
+            timestamp: new Date().toISOString(),
+          },
+          'list-data.json'
+        );
       }
 
-      // ----- Initialisation ----- //
+      // ----- Init ----- //
       createNetwork(currentLayout);
     </script>
   </body>
