@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - codex/**
+  pull_request:
+
+jobs:
+  unit-tests:
+    name: Unit Tests (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile Python sources
+        run: python -m compileall LLDB_Formatters benchmarks
+
+      - name: Run pure-Python unit suite
+        run: >
+          python -m unittest -q
+          LLDB_Formatters.tests.test_command_ux
+          LLDB_Formatters.tests.test_diagnostics
+          LLDB_Formatters.tests.test_extraction
+          LLDB_Formatters.tests.test_graph_formatters
+          LLDB_Formatters.tests.test_linear_formatters
+          LLDB_Formatters.tests.test_linear_strategy
+          LLDB_Formatters.tests.test_pointers
+          LLDB_Formatters.tests.test_renderers
+          LLDB_Formatters.tests.test_schema_adapters
+          LLDB_Formatters.tests.test_summary_semantics
+          LLDB_Formatters.tests.test_synthetic_providers
+          LLDB_Formatters.tests.test_tree_strategies
+          LLDB_Formatters.tests.test_value_rendering
+          LLDB_Formatters.tests.test_web_visualizer
+
+  lldb-integration:
+    name: LLDB Integration (macOS canonical)
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Python sources
+        run: python -m compileall LLDB_Formatters benchmarks
+
+      - name: Run LLDB integration suite
+        run: python -m unittest -q LLDB_Formatters.tests.test_lldb_integration
+
+      - name: Capture benchmark smoke baseline
+        run: >
+          python benchmarks/benchmark_suite.py
+          --iterations 1
+          --list-size 2000
+          --tree-depth 128
+          --graph-nodes 200
+          --graph-degree 8
+          --tree-max-depth 128

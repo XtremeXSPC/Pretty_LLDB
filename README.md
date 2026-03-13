@@ -101,6 +101,13 @@ This project uses an advanced software architecture to ensure it is robust and e
 - **Strategy Pattern:** The logic for traversing a data structure (e.g., "pre-order traversal" for a tree) is separated from the presentation logic. This makes it easy to add new traversal algorithms without changing the core formatter code.
 - **Configuration Object:** All settings are managed in a single, clean configuration object, providing a centralized point of control.
 
+## Project Operations
+
+- Compatibility Matrix: [COMPATIBILITY.md](COMPATIBILITY.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Release Checklist: [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
+- Local Benchmarks: `python3 benchmarks/benchmark_suite.py`
+
 ## Contributing
 
 Contributions are welcome! Whether it's adding a new visualizer, supporting a new data structure, or improving the documentation, your help is appreciated.

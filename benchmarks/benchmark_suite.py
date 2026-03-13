@@ -7,10 +7,6 @@ import sys
 import time
 from contextlib import contextmanager
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
-
 from LLDB_Formatters.config import g_config
 from LLDB_Formatters.extraction import (
     extract_graph_structure,
@@ -33,6 +29,10 @@ from LLDB_Formatters.web_visualizer import (
     generate_list_visualization_html,
     generate_tree_visualization_html,
 )
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 
 def _null_pointer(name):
@@ -114,7 +114,9 @@ def make_dense_graph_fixture(node_count, degree):
 
 
 @contextmanager
-def temporary_config(summary_max_items, synthetic_max_children, graph_max_neighbors, tree_max_depth):
+def temporary_config(
+    summary_max_items, synthetic_max_children, graph_max_neighbors, tree_max_depth
+):
     original = (
         g_config.summary_max_items,
         g_config.synthetic_max_children,
