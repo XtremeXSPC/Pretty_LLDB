@@ -26,6 +26,7 @@ except ImportError:
 from .helpers import (
     SUMMARY_CYCLE_MARKER,
     _safe_get_node_from_pointer,
+    g_config,
     get_raw_pointer,
     get_value_summary,
 )
@@ -218,9 +219,15 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
     ) -> Tuple[List[str], Dict[str, Any]]:
         values: List[str] = []
         visited_addrs = set()
+        max_depth = g_config.tree_max_depth
+        depth_limited = False
 
-        def _recursive_traverse(node_ptr):
+        def _recursive_traverse(node_ptr, depth):
+            nonlocal depth_limited
             if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
+                return
+            if depth > max_depth:
+                depth_limited = True
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -242,10 +249,13 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
             if len(values) < max_items:
                 children = get_tree_children(node, schema)
                 for child in children:
-                    _recursive_traverse(child)
+                    _recursive_traverse(child, depth + 1)
 
-        _recursive_traverse(root_ptr)
-        metadata: Dict[str, Any] = {"truncated": len(values) >= max_items}
+        _recursive_traverse(root_ptr, 0)
+        metadata: Dict[str, Any] = {
+            "truncated": len(values) >= max_items or depth_limited,
+            "depth_limited": depth_limited,
+        }
         return values, metadata
 
     def _get_ordered_addresses(
@@ -254,11 +264,14 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
         """Returns a list of node addresses in pre-order."""
         addresses: List[int] = []
         visited_addrs = set()
+        max_depth = g_config.tree_max_depth
 
-        def _recursive_traverse_addr(node_ptr):
+        def _recursive_traverse_addr(node_ptr, depth):
             if not node_ptr or get_raw_pointer(node_ptr) == 0:
                 return
             if max_items is not None and len(addresses) >= max_items:
+                return
+            if depth > max_depth:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -274,9 +287,9 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
             if node and node.IsValid():
                 children = get_tree_children(node, resolve_tree_node_schema(node))
                 for child in children:
-                    _recursive_traverse_addr(child)
+                    _recursive_traverse_addr(child, depth + 1)
 
-        _recursive_traverse_addr(root_ptr)
+        _recursive_traverse_addr(root_ptr, 0)
         return addresses
 
 
@@ -292,9 +305,15 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
     ) -> Tuple[List[str], Dict[str, Any]]:
         values: List[str] = []
         visited_addrs = set()
+        max_depth = g_config.tree_max_depth
+        depth_limited = False
 
-        def _recursive_traverse(node_ptr):
+        def _recursive_traverse(node_ptr, depth):
+            nonlocal depth_limited
             if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
+                return
+            if depth > max_depth:
+                depth_limited = True
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -316,7 +335,7 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
             if is_binary:
                 # 1. Recurse on Left Subtree
                 if left and get_raw_pointer(left) != 0:
-                    _recursive_traverse(left)
+                    _recursive_traverse(left, depth + 1)
 
                 if len(values) >= max_items:
                     return
@@ -329,7 +348,7 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
 
                 # 3. Recurse on Right Subtree
                 if right and get_raw_pointer(right) != 0:
-                    _recursive_traverse(right)
+                    _recursive_traverse(right, depth + 1)
             else:
                 # Fallback to the n-ary tree generalization:
                 # (First Child, Root, Other Children)
@@ -337,7 +356,7 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
 
                 # 1. Recurse on first child's subtree
                 if children:
-                    _recursive_traverse(children[0])
+                    _recursive_traverse(children[0], depth + 1)
 
                 if len(values) >= max_items:
                     return
@@ -350,10 +369,13 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
 
                 # 3. Recurse on the rest of the children's subtrees
                 for i in range(1, len(children)):
-                    _recursive_traverse(children[i])
+                    _recursive_traverse(children[i], depth + 1)
 
-        _recursive_traverse(root_ptr)
-        metadata: Dict[str, Any] = {"truncated": len(values) >= max_items}
+        _recursive_traverse(root_ptr, 0)
+        metadata: Dict[str, Any] = {
+            "truncated": len(values) >= max_items or depth_limited,
+            "depth_limited": depth_limited,
+        }
         return values, metadata
 
     def _get_ordered_addresses(
@@ -362,11 +384,14 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
         """Returns a list of node addresses in in-order."""
         addresses: List[int] = []
         visited_addrs = set()
+        max_depth = g_config.tree_max_depth
 
-        def _recursive_traverse_addr(node_ptr):
+        def _recursive_traverse_addr(node_ptr, depth):
             if not node_ptr or get_raw_pointer(node_ptr) == 0:
                 return
             if max_items is not None and len(addresses) >= max_items:
+                return
+            if depth > max_depth:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -385,27 +410,27 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
 
             if is_binary:
                 if left and get_raw_pointer(left) != 0:
-                    _recursive_traverse_addr(left)
+                    _recursive_traverse_addr(left, depth + 1)
                 if max_items is not None and len(addresses) >= max_items:
                     return
                 addresses.append(node_addr)
                 if max_items is not None and len(addresses) >= max_items:
                     return
                 if right and get_raw_pointer(right) != 0:
-                    _recursive_traverse_addr(right)
+                    _recursive_traverse_addr(right, depth + 1)
             else:
                 children = get_tree_children(node, schema)
                 if children:
-                    _recursive_traverse_addr(children[0])
+                    _recursive_traverse_addr(children[0], depth + 1)
                 if max_items is not None and len(addresses) >= max_items:
                     return
                 addresses.append(node_addr)
                 if max_items is not None and len(addresses) >= max_items:
                     return
                 for i in range(1, len(children)):
-                    _recursive_traverse_addr(children[i])
+                    _recursive_traverse_addr(children[i], depth + 1)
 
-        _recursive_traverse_addr(root_ptr)
+        _recursive_traverse_addr(root_ptr, 0)
         return addresses
 
 
@@ -417,9 +442,15 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
     ) -> Tuple[List[str], Dict[str, Any]]:
         values: List[str] = []
         visited_addrs = set()
+        max_depth = g_config.tree_max_depth
+        depth_limited = False
 
-        def _recursive_traverse(node_ptr):
+        def _recursive_traverse(node_ptr, depth):
+            nonlocal depth_limited
             if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
+                return
+            if depth > max_depth:
+                depth_limited = True
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -438,7 +469,7 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
             schema = resolve_tree_node_schema(node)
             children = get_tree_children(node, schema)
             for child in children:
-                _recursive_traverse(child)
+                _recursive_traverse(child, depth + 1)
 
             if len(values) >= max_items:
                 return
@@ -447,8 +478,11 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
             value = get_resolved_child(node, schema.value_field)
             values.append(get_value_summary(value))
 
-        _recursive_traverse(root_ptr)
-        metadata: Dict[str, Any] = {"truncated": len(values) >= max_items}
+        _recursive_traverse(root_ptr, 0)
+        metadata: Dict[str, Any] = {
+            "truncated": len(values) >= max_items or depth_limited,
+            "depth_limited": depth_limited,
+        }
         return values, metadata
 
     def _get_ordered_addresses(
@@ -457,11 +491,14 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
         """Returns a list of node addresses in post-order."""
         addresses: List[int] = []
         visited_addrs = set()
+        max_depth = g_config.tree_max_depth
 
-        def _recursive_traverse_addr(node_ptr):
+        def _recursive_traverse_addr(node_ptr, depth):
             if not node_ptr or get_raw_pointer(node_ptr) == 0:
                 return
             if max_items is not None and len(addresses) >= max_items:
+                return
+            if depth > max_depth:
                 return
 
             node_addr = get_raw_pointer(node_ptr)
@@ -473,7 +510,7 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
             if node and node.IsValid():
                 children = get_tree_children(node, resolve_tree_node_schema(node))
                 for child in children:
-                    _recursive_traverse_addr(child)
+                    _recursive_traverse_addr(child, depth + 1)
                     if max_items is not None and len(addresses) >= max_items:
                         return
 
@@ -481,5 +518,5 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
                 return
             addresses.append(node_addr)
 
-        _recursive_traverse_addr(root_ptr)
+        _recursive_traverse_addr(root_ptr, 0)
         return addresses

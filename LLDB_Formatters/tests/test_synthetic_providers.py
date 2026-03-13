@@ -128,6 +128,27 @@ def _graph_fixture():
     )
 
 
+def _deep_tree_fixture(depth):
+    current = None
+    address_map = {}
+    for value in range(depth, 0, -1):
+        node = MockSBValue(
+            children={"left": None, "right": current, "value": MockSBValue(value)},
+            name=f"node_{value}",
+            address=0x4100 + value,
+            type_name="TreeNode<int>",
+        )
+        address_map[node.GetAddress().GetFileAddress()] = node
+        current = node
+
+    return MockSBValue(
+        children={"root": current, "size": MockSBValue(depth)},
+        name="deep_tree",
+        type_name="MyBinaryTree<int>",
+        address_map=address_map,
+    )
+
+
 class TestSyntheticProviders(unittest.TestCase):
     def test_formatter_config_lists_synthetic_max_children(self):
         result = MockResult()
@@ -232,6 +253,23 @@ class TestSyntheticProviders(unittest.TestCase):
             self.assertEqual(provider.get_child_at_index(1).GetName(), "node2")
 
         self.assertEqual(update_spy.call_count, 1)
+
+    def test_tree_provider_respects_tree_depth_limit(self):
+        original_depth_limit = g_config.tree_max_depth
+        original_child_limit = g_config.synthetic_max_children
+        g_config.tree_max_depth = 2
+        g_config.synthetic_max_children = 8
+        try:
+            provider = TreeProvider(_deep_tree_fixture(6), {})
+            values = [
+                provider.get_child_at_index(index).GetChildMemberWithName("value").GetSummary()
+                for index in range(provider.num_children())
+            ]
+        finally:
+            g_config.tree_max_depth = original_depth_limit
+            g_config.synthetic_max_children = original_child_limit
+
+        self.assertEqual(values, ["1", "2", "3"])
 
 
 if __name__ == "__main__":

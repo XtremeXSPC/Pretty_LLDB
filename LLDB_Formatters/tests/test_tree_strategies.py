@@ -11,12 +11,23 @@
 
 import unittest
 
+from LLDB_Formatters.config import g_config
 from LLDB_Formatters.strategies import (
     InOrderTreeStrategy,
     PostOrderTreeStrategy,
     PreOrderTreeStrategy,
 )
 from LLDB_Formatters.tests.mock_lldb import MockSBValue
+
+
+def _make_right_skewed_tree(depth):
+    current = None
+    for value in range(depth, 0, -1):
+        current = MockSBValue(
+            value,
+            {"left": None, "right": current, "value": MockSBValue(value)},
+        )
+    return current
 
 
 # ----- Test Cases for Tree Traversal Strategies ----- #
@@ -154,6 +165,19 @@ class TestTreeStrategies(unittest.TestCase):
         self.assertEqual(len(values), max_items, "Incorrect number of items after truncation")
         self.assertEqual(values, ["0", "1", "2", "3", "4"], "Incorrect values after truncation")
         self.assertTrue(metadata.get("truncated", False), "Truncated flag was not set correctly")
+
+    def test_preorder_traversal_respects_tree_depth_limit(self):
+        original_depth_limit = g_config.tree_max_depth
+        g_config.tree_max_depth = 2
+        try:
+            root = _make_right_skewed_tree(6)
+            values, metadata = PreOrderTreeStrategy().traverse(root, max_items=100)
+        finally:
+            g_config.tree_max_depth = original_depth_limit
+
+        self.assertEqual(values, ["1", "2", "3"])
+        self.assertTrue(metadata.get("depth_limited"))
+        self.assertTrue(metadata.get("truncated"))
 
 
 # This allows running the test file directly.

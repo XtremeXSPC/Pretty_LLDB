@@ -114,15 +114,17 @@ def make_dense_graph_fixture(node_count, degree):
 
 
 @contextmanager
-def temporary_config(summary_max_items, synthetic_max_children, graph_max_neighbors):
+def temporary_config(summary_max_items, synthetic_max_children, graph_max_neighbors, tree_max_depth):
     original = (
         g_config.summary_max_items,
         g_config.synthetic_max_children,
         g_config.graph_max_neighbors,
+        g_config.tree_max_depth,
     )
     g_config.summary_max_items = summary_max_items
     g_config.synthetic_max_children = synthetic_max_children
     g_config.graph_max_neighbors = graph_max_neighbors
+    g_config.tree_max_depth = tree_max_depth
     try:
         yield
     finally:
@@ -130,6 +132,7 @@ def temporary_config(summary_max_items, synthetic_max_children, graph_max_neighb
             g_config.summary_max_items,
             g_config.synthetic_max_children,
             g_config.graph_max_neighbors,
+            g_config.tree_max_depth,
         ) = original
 
 
@@ -266,6 +269,7 @@ def parse_args():
         default=g_config.synthetic_max_children,
     )
     parser.add_argument("--graph-max-neighbors", type=int, default=g_config.graph_max_neighbors)
+    parser.add_argument("--tree-max-depth", type=int, default=g_config.tree_max_depth)
     return parser.parse_args()
 
 
@@ -275,6 +279,7 @@ def main():
         summary_max_items=args.summary_max_items,
         synthetic_max_children=args.synthetic_max_children,
         graph_max_neighbors=args.graph_max_neighbors,
+        tree_max_depth=args.tree_max_depth,
     ):
         list_rows = run_list_benchmarks(args.list_size, args.iterations)
         tree_rows = run_tree_benchmarks(args.tree_depth, args.iterations)
@@ -296,6 +301,7 @@ def main():
         f" summary_max_items={args.summary_max_items},"
         f" synthetic_max_children={args.synthetic_max_children},"
         f" graph_max_neighbors={args.graph_max_neighbors}"
+        f", tree_max_depth={args.tree_max_depth}"
     )
     print()
 

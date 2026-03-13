@@ -42,6 +42,12 @@ SETTING_SPECS = (
         value_kind="integer",
     ),
     FormatterSettingSpec(
+        key="tree_max_depth",
+        default=512,
+        description="Max tree depth explored during extraction and traversal.",
+        value_kind="integer",
+    ),
+    FormatterSettingSpec(
         key="tree_traversal_strategy",
         default="preorder",
         description="Traversal order for tree summaries.",

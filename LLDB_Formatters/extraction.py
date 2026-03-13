@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from .helpers import (
     _safe_get_node_from_pointer,
     debug_print,
+    g_config,
     get_nonsynthetic_value,
     get_raw_pointer,
     get_value_summary,
@@ -359,18 +360,31 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
         return extraction
 
     visited_addrs = set()
+    max_depth = g_config.tree_max_depth
+    depth_limit_warned = False
+    stack = [(container_schema.root_ptr, 0)]
 
-    def _visit(node_ptr):
+    while stack:
+        node_ptr, depth = stack.pop()
         node_addr = get_raw_pointer(node_ptr)
         if node_addr == 0:
-            return
+            continue
+
+        if depth > max_depth:
+            if not depth_limit_warned:
+                diagnostics.warn(
+                    "depth_limit_reached",
+                    f"Stopped tree extraction after reaching the configured depth limit of {max_depth}.",
+                )
+                depth_limit_warned = True
+            continue
 
         if node_addr in visited_addrs:
             diagnostics.warn(
                 "cycle_detected",
                 f"Detected a cycle at tree node address 0x{node_addr:x}.",
             )
-            return
+            continue
         visited_addrs.add(node_addr)
 
         node_struct = _safe_get_node_from_pointer(node_ptr)
@@ -379,7 +393,7 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
                 "invalid_node",
                 f"Could not dereference tree node at address 0x{node_addr:x}.",
             )
-            return
+            continue
 
         node_schema = resolve_tree_node_schema(node_struct, diagnostics)
         if extraction.value_field is None:
@@ -390,11 +404,24 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
         value = get_resolved_child(node_struct, node_schema.value_field)
         children_ptrs = get_tree_children(node_struct, node_schema)
         child_addresses = []
+        next_children = []
         for child_ptr in children_ptrs:
             child_addr = get_raw_pointer(child_ptr)
-            if child_addr != 0:
-                child_addresses.append(child_addr)
-                extraction.edges.append(TreeEdge(source=node_addr, target=child_addr))
+            if child_addr == 0:
+                continue
+
+            if depth + 1 > max_depth:
+                if not depth_limit_warned:
+                    diagnostics.warn(
+                        "depth_limit_reached",
+                        f"Stopped tree extraction after reaching the configured depth limit of {max_depth}.",
+                    )
+                    depth_limit_warned = True
+                continue
+
+            child_addresses.append(child_addr)
+            extraction.edges.append(TreeEdge(source=node_addr, target=child_addr))
+            next_children.append((child_ptr, depth + 1))
 
         extraction.nodes.append(
             TreeNode(
@@ -404,10 +431,8 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
             )
         )
 
-        for child_ptr in children_ptrs:
-            _visit(child_ptr)
-
-    _visit(container_schema.root_ptr)
+        for child_item in reversed(next_children):
+            stack.append(child_item)
 
     if extraction.size is None and extraction.nodes:
         extraction.size = len(extraction.nodes)

@@ -1,11 +1,22 @@
 import unittest
 
+from LLDB_Formatters.config import g_config
 from LLDB_Formatters.extraction import (
     extract_graph_structure,
     extract_linear_structure,
     extract_tree_structure,
 )
 from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
+
+
+def _make_right_skewed_tree(depth):
+    current = None
+    for value in range(depth, 0, -1):
+        current = MockSBValue(
+            value,
+            {"left": None, "right": current, "value": MockSBValue(value)},
+        )
+    return current
 
 
 class TestExtractionLayer(unittest.TestCase):
@@ -50,6 +61,20 @@ class TestExtractionLayer(unittest.TestCase):
         self.assertEqual(sorted(node.value for node in extraction.nodes), ["1", "2", "3"])
         self.assertEqual(len(extraction.edges), 2)
         self.assertEqual(extraction.child_mode, "binary")
+
+    def test_extract_tree_structure_respects_depth_limit(self):
+        original_depth_limit = g_config.tree_max_depth
+        g_config.tree_max_depth = 2
+        try:
+            tree = MockSBValue(
+                children={"root": _make_right_skewed_tree(6), "size": MockSBValue(6)}
+            )
+            extraction = extract_tree_structure(tree)
+        finally:
+            g_config.tree_max_depth = original_depth_limit
+
+        self.assertEqual([node.value for node in extraction.nodes], ["1", "2", "3"])
+        self.assertEqual([warning.code for warning in extraction.diagnostics.warnings], ["depth_limit_reached"])
 
     def test_extract_graph_structure_builds_directional_edges(self):
         node_c = MockSBValue(30, {"value": MockSBValue(30), "neighbors": MockSBValueContainer([])})

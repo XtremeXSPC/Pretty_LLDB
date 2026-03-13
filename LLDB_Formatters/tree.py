@@ -194,12 +194,17 @@ def tree_summary_provider(valobj, internal_dict):
 # ------- Helper to recursively "draw" the tree for 'pptree' commands ------- #
 
 
-def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=None):
+def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=None, depth=0):
     """Helper function to recursively "draw" the tree in Pre-Order."""
     if visited_addrs is None:
         visited_addrs = set()
 
     if not node_ptr or get_raw_pointer(node_ptr) == 0:
+        return
+    if depth > g_config.tree_max_depth:
+        result.AppendMessage(
+            f"{prefix}{'└── ' if is_last else '├── '}{Colors.RED}[depth limit]{Colors.RESET}"
+        )
         return
 
     node_addr = get_raw_pointer(node_ptr)
@@ -225,7 +230,14 @@ def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=N
     children = get_tree_children(node, schema)
     for i, child in enumerate(children):
         new_prefix = f"{prefix}{'    ' if is_last else '│   '}"
-        _recursive_preorder_print(child, new_prefix, i == len(children) - 1, result, visited_addrs)
+        _recursive_preorder_print(
+            child,
+            new_prefix,
+            i == len(children) - 1,
+            result,
+            visited_addrs,
+            depth + 1,
+        )
 
 
 # ------------ Central dispatcher for all 'pptree' commands ------------- #

@@ -1,5 +1,6 @@
 import unittest
 
+from LLDB_Formatters.config import g_config
 from LLDB_Formatters.graph import GraphProvider
 from LLDB_Formatters.linear import linear_container_summary_provider
 from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
@@ -8,6 +9,16 @@ from LLDB_Formatters.tree import tree_summary_provider
 
 def _invalid_value(name):
     return MockSBValue(name=name, valid=False)
+
+
+def _make_right_skewed_tree(depth):
+    current = None
+    for value in range(depth, 0, -1):
+        current = MockSBValue(
+            value,
+            {"left": None, "right": current, "value": MockSBValue(value)},
+        )
+    return current
 
 
 class TestSummarySemantics(unittest.TestCase):
@@ -85,6 +96,23 @@ class TestSummarySemantics(unittest.TestCase):
         summary = GraphProvider(graph_value, {}).get_summary()
 
         self.assertEqual(summary, "Graph | V = 1 | E = 0 [incomplete]")
+
+    def test_tree_summary_marks_depth_limited_rendering_as_incomplete(self):
+        original_depth_limit = g_config.tree_max_depth
+        g_config.tree_max_depth = 2
+        try:
+            tree_value = MockSBValue(
+                children={"root": _make_right_skewed_tree(6), "size": MockSBValue(6)},
+                name="deep_tree",
+                type_name="MyBinaryTree<int>",
+            )
+            summary = tree_summary_provider(tree_value, {})
+        finally:
+            g_config.tree_max_depth = original_depth_limit
+
+        self.assertIn("size = 6", summary)
+        self.assertIn("[1 -> 2 -> 3 ...]", summary)
+        self.assertTrue(summary.endswith("[incomplete]"))
 
 
 if __name__ == "__main__":
