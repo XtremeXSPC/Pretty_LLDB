@@ -74,6 +74,13 @@ class TestCommandUX(unittest.TestCase):
 
         self.assertEqual(result.error, "Usage: webgraph <variable> [directed|undirected]")
 
+    def test_webtree_usage_is_specific(self):
+        result = MockResult()
+
+        export_tree_web_command(_make_debugger(), "", result, {})
+
+        self.assertEqual(result.error, "Usage: webtree <variable> [preorder|inorder|postorder]")
+
     def test_graph_commands_validate_mode_argument(self):
         graph_value = MockSBValue(
             children={
@@ -94,6 +101,19 @@ class TestCommandUX(unittest.TestCase):
                 result = MockResult()
                 command_fn(debugger, command_text, result, {})
                 self.assertIn("Invalid graph mode 'sideways'.", result.error)
+
+    def test_webtree_validates_traversal_argument(self):
+        tree_value = MockSBValue(
+            children={"root": MockSBValue(0, is_pointer=True), "size": MockSBValue(0)},
+            name="my_tree",
+            type_name="MyBinaryTree<int>",
+        )
+        debugger = _make_debugger(values={"my_tree": tree_value})
+        result = MockResult()
+
+        export_tree_web_command(debugger, "my_tree sideways", result, {})
+
+        self.assertIn("Invalid tree traversal 'sideways'.", result.error)
 
     def test_formatter_config_usage_is_normalized(self):
         result = MockResult()

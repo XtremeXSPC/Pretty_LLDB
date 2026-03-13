@@ -39,13 +39,14 @@ from .extraction import (
     extract_linear_structure,
     extract_tree_structure,
 )
-from .helpers import debug_print
+from .helpers import debug_print, g_config
 from .renderers import (
     build_graph_renderer_payload,
     build_list_renderer_payload,
     build_tree_renderer_payload,
 )
-from .visualization_options import parse_graph_render_mode
+from .schema_adapters import resolve_tree_container_schema
+from .visualization_options import create_tree_traversal_strategy, parse_graph_render_mode
 
 # ----------------------------------------------------------------------- #
 # SECTION 1: PRIVATE HELPER FUNCTIONS
@@ -166,7 +167,7 @@ def generate_list_visualization_html(valobj):
     return _generate_html("list_visualizer.html", template_data)
 
 
-def generate_tree_visualization_html(valobj):
+def generate_tree_visualization_html(valobj, traversal_name=None):
     """
     Takes a tree SBValue and returns a complete, self-contained HTML string
     for its visualization. Returns None if the tree is empty.
@@ -175,7 +176,21 @@ def generate_tree_visualization_html(valobj):
     extracted_tree = extract_tree_structure(valobj)
     if extracted_tree.is_empty or extracted_tree.error_message:
         return None
-    tree_data = build_tree_renderer_payload(extracted_tree)
+
+    root_ptr = resolve_tree_container_schema(valobj).root_ptr
+    traversal_addresses = None
+    resolved_traversal_name = None
+    if root_ptr:
+        strategy, resolved_traversal_name = create_tree_traversal_strategy(
+            traversal_name,
+            default_mode=g_config.tree_traversal_strategy,
+        )
+        traversal_addresses = strategy.ordered_addresses(root_ptr)
+
+    tree_data = build_tree_renderer_payload(
+        extracted_tree,
+        traversal_order=traversal_addresses,
+    )
 
     # ----- UNIFIED INFO TABLE GENERATION ------ #
     info = {
@@ -183,6 +198,7 @@ def generate_tree_visualization_html(valobj):
         "Type Name": valobj.GetTypeName(),
         "Size": tree_data["tree_size"],
         "Root Address": tree_data["root_address"],
+        "Traversal": resolved_traversal_name or "n/a",
     }
     info_html = "<h3>Tree Information</h3><table>"
     for key, value in info.items():
@@ -306,18 +322,28 @@ def export_list_web_command(debugger, command, result, internal_dict):
 
 def export_tree_web_command(debugger, command, result, internal_dict):
     """Implements the 'webtree' command."""
-    _, var_name, valobj = resolve_command_variable(
+    args, var_name, valobj = resolve_command_variable(
         debugger,
         command,
         result,
         "webtree",
+        "<variable> [preorder|inorder|postorder]",
     )
     if not valobj:
+        return
+    traversal_name = args[1] if len(args) > 1 else None
+    try:
+        _, resolved_traversal_name = create_tree_traversal_strategy(
+            traversal_name,
+            default_mode=g_config.tree_traversal_strategy,
+        )
+    except ValueError as error:
+        result.SetError(str(error))
         return
     extraction = extract_tree_structure(valobj)
     if not _validate_visualizable_structure(result, "tree", extraction):
         return
-    html_content = generate_tree_visualization_html(valobj)
+    html_content = generate_tree_visualization_html(valobj, traversal_name=resolved_traversal_name)
     _display_html_content(html_content, var_name, result)
 
 

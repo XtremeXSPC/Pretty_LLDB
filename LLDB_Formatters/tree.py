@@ -45,15 +45,7 @@ from .schema_adapters import (
 from .strategies import InOrderTreeStrategy, PostOrderTreeStrategy, PreOrderTreeStrategy
 from .summary_contract import append_incomplete_marker, unsupported_layout_summary
 from .synthetic_support import create_synthetic_child, parse_synthetic_child_index
-
-
-def _get_tree_strategy(strategy_name=None):
-    resolved_name = strategy_name or g_config.tree_traversal_strategy
-    if resolved_name == "inorder":
-        return InOrderTreeStrategy(), "inorder"
-    if resolved_name == "postorder":
-        return PostOrderTreeStrategy(), "postorder"
-    return PreOrderTreeStrategy(), "preorder"
+from .visualization_options import create_tree_traversal_strategy
 
 
 def _collect_tree_nodes_by_address(root_ptr):
@@ -92,7 +84,9 @@ class TreeProvider:
         if not root_ptr or get_raw_pointer(root_ptr) == 0:
             return
 
-        strategy, _ = _get_tree_strategy()
+        strategy, _ = create_tree_traversal_strategy(
+            default_mode=g_config.tree_traversal_strategy
+        )
         ordered_addresses = strategy.ordered_addresses(root_ptr, g_config.synthetic_max_children)
         nodes_by_address = _collect_tree_nodes_by_address(root_ptr)
 
@@ -148,7 +142,9 @@ def tree_summary_provider(valobj, internal_dict):
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
         return f"Tree is empty{diagnostics_suffix}"
 
-    strategy, strategy_name = _get_tree_strategy()
+    strategy, strategy_name = create_tree_traversal_strategy(
+        default_mode=g_config.tree_traversal_strategy
+    )
     values, metadata = strategy.traverse(root_node_ptr, g_config.summary_max_items)
 
     colored_values = []

@@ -1,6 +1,14 @@
+from .strategies import InOrderTreeStrategy, PostOrderTreeStrategy, PreOrderTreeStrategy
+
 GRAPH_RENDER_MODES = {
     "directed": True,
     "undirected": False,
+}
+
+TREE_TRAVERSAL_MODES = {
+    "preorder": PreOrderTreeStrategy,
+    "inorder": InOrderTreeStrategy,
+    "postorder": PostOrderTreeStrategy,
 }
 
 
@@ -31,3 +39,17 @@ def parse_graph_export_arguments(args):
 
     directed = parse_graph_render_mode(mode_token)
     return output_filename, directed
+
+
+def create_tree_traversal_strategy(mode_token=None, default_mode="preorder"):
+    normalized = default_mode
+    if mode_token is not None:
+        normalized = mode_token.lower()
+
+    if normalized not in TREE_TRAVERSAL_MODES:
+        valid_modes = ", ".join(TREE_TRAVERSAL_MODES)
+        raise ValueError(
+            f"Invalid tree traversal '{mode_token}'. Valid options are: {valid_modes}."
+        )
+
+    return TREE_TRAVERSAL_MODES[normalized](), normalized

@@ -64,7 +64,7 @@ def formatter_help_command(debugger, command, result, internal_dict):
   weblist [{C_ARG}<variable>{C_RST}]
     - Opens an interactive list visualization in your web browser.
 
-  webtree [{C_ARG}<variable>{C_RST}]
+  webtree [{C_ARG}<variable> [preorder|inorder|postorder]{C_RST}]
     - Opens an interactive tree visualization in your web browser.
 
   webgraph [{C_ARG}<variable> [directed|undirected]{C_RST}] (alias: `webg`)
