@@ -190,6 +190,20 @@ class TestRenderers(unittest.TestCase):
         self.assertIn('Node_0x30 [label="3: right"];', dot)
         self.assertLess(dot.index("Node_0x20 -> Node_0x10;"), dot.index("Node_0x20 -> Node_0x30;"))
 
+    def test_build_tree_renderer_payload_strips_ansi_sequences(self):
+        extracted_tree = ExtractedTreeStructure(
+            size=1,
+            root_address=0x20,
+            child_mode="binary",
+            nodes=[TreeNode(address=0x20, value="\x1b[31m[invalid]\x1b[0m")],
+        )
+
+        payload = build_tree_renderer_payload(extracted_tree, traversal_order=[0x20])
+
+        self.assertEqual(payload["nodes_data"][0]["label"], "1: [invalid]")
+        self.assertEqual(payload["nodes_data"][0]["value"], "[invalid]")
+        self.assertEqual(payload["nodes_data"][0]["title"], "Value: [invalid]\nAddress: 0x20")
+
 
 if __name__ == "__main__":
     unittest.main()

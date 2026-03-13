@@ -75,6 +75,27 @@ def formatter_help_command(debugger, command, result, internal_dict):
     result.AppendMessage(help_message)
 
 
+def _formatter_load_order_key(item):
+    """Return the registration priority used for debugger startup output."""
+
+    if item["type"] == "synthetic":
+        return 0
+    if item["type"] == "summary":
+        return 1
+    return 2
+
+
+def _iter_formatter_registry_in_load_order():
+    """
+    Return registry items in the order used during LLDB initialization.
+
+    Synthetic providers are intentionally loaded and printed before summary
+    providers so the debugger startup log remains easier to scan.
+    """
+
+    return sorted(registry.FORMATTER_REGISTRY, key=_formatter_load_order_key)
+
+
 # --------------------- LLDB Module Initialization ---------------------- #
 def __lldb_init_module(debugger, internal_dict):
     """
@@ -99,7 +120,7 @@ def __lldb_init_module(debugger, internal_dict):
 
     # ----- 2. Dynamic Formatter Registration ----- #
     # Iterate over the registry populated by the @register decorators.
-    for item in registry.FORMATTER_REGISTRY:
+    for item in _iter_formatter_registry_in_load_order():
         regex = item["regex"]
 
         if item["type"] == "summary":

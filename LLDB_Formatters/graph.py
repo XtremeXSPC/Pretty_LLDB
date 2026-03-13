@@ -17,10 +17,12 @@ from .command_helpers import (
     resolve_command_arguments,
     unsupported_layout_message,
 )
+from .abi_layouts import iter_container_values
 from .extraction import extract_graph_structure
 from .helpers import (
     SUMMARY_TRUNCATION_MARKER,
     Colors,
+    _safe_get_node_from_pointer,
     g_config,
     get_value_summary,
 )
@@ -43,6 +45,7 @@ class GraphProvider:
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
         self.nodes_container = None
+        self.node_entries = []
         self._loaded = False
         # update() is called on-demand to ensure it has the latest state.
 
@@ -50,6 +53,12 @@ class GraphProvider:
         """Resolve and cache the graph field that stores the node collection."""
 
         self.nodes_container = resolve_graph_container_schema(self.valobj).nodes_container
+        self.node_entries = []
+        if self.nodes_container and self.nodes_container.IsValid():
+            self.node_entries = iter_container_values(
+                self.nodes_container,
+                max_items=g_config.synthetic_max_children,
+            )
         self._loaded = True
 
     def _ensure_updated(self):
@@ -62,16 +71,18 @@ class GraphProvider:
         """Return how many graph nodes LLDB should expose as children."""
 
         self._ensure_updated()
-        if self.nodes_container and self.nodes_container.IsValid():
-            return min(self.nodes_container.GetNumChildren(), g_config.synthetic_max_children)
-        return 0
+        return len(self.node_entries)
 
     def get_child_at_index(self, index):
         """Return the node child at `index`, or `None` when it is unavailable."""
 
         self._ensure_updated()
-        if self.nodes_container and 0 <= index < self.num_children():
-            return self.nodes_container.GetChildAtIndex(index)
+        if 0 <= index < len(self.node_entries):
+            child = self.node_entries[index]
+            resolved_child = _safe_get_node_from_pointer(child)
+            if resolved_child and resolved_child.IsValid():
+                return resolved_child
+            return child
         return None
 
     def get_child_index(self, name):
@@ -129,12 +140,11 @@ def graph_node_summary_provider(valobj, internal_dict):
         neighbor_summaries = []
         # Use max_neighbors from the global config object.
         max_neighbors = g_config.graph_max_neighbors
-        num_neighbors = neighbors.GetNumChildren()
+        neighbor_entries = iter_container_values(neighbors)
+        num_neighbors = len(neighbor_entries)
 
-        for i in range(min(num_neighbors, max_neighbors)):
-            neighbor_node = neighbors.GetChildAtIndex(i)
-            if neighbor_node.GetType().IsPointerType():
-                neighbor_node = neighbor_node.Dereference()
+        for neighbor_entry in neighbor_entries[:max_neighbors]:
+            neighbor_node = _safe_get_node_from_pointer(neighbor_entry)
 
             if neighbor_node and neighbor_node.IsValid():
                 neighbor_schema = resolve_graph_node_schema(neighbor_node)

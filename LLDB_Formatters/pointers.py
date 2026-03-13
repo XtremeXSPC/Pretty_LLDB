@@ -37,6 +37,17 @@ WRAPPER_FIELDS = (
     "_M_storage",
 )
 
+POINTER_WRAPPER_TYPE_TOKENS = (
+    "unique_ptr",
+    "shared_ptr",
+    "weak_ptr",
+    "__uniq_ptr",
+    "__shared_ptr",
+    "_tuple_impl",
+    "_head_base",
+    "compressed_pair",
+)
+
 MAX_POINTER_RESOLUTION_DEPTH = 6
 
 
@@ -165,6 +176,25 @@ def _safe_dereference(value):
     return None
 
 
+def _safe_type_name(value) -> str:
+    """Return the LLDB type name for a value, or an empty string on failure."""
+
+    if not value or not value.IsValid():
+        return ""
+
+    try:
+        return value.GetTypeName() or ""
+    except Exception:
+        return ""
+
+
+def _looks_like_pointer_wrapper_type(type_name: str) -> bool:
+    """Return whether a type name appears to be part of a smart-pointer wrapper chain."""
+
+    lowered = type_name.lower()
+    return any(token in lowered for token in POINTER_WRAPPER_TYPE_TOKENS)
+
+
 def _resolve_pointer_impl(value, allow_object_address, depth, seen_ids):
     """Recursively resolve raw pointers and wrapper fields into one pointee."""
 
@@ -191,6 +221,8 @@ def _resolve_pointer_impl(value, allow_object_address, depth, seen_ids):
             )
     except Exception:
         pass
+
+    type_name = _safe_type_name(base_value)
 
     for field_name in DIRECT_POINTER_FIELDS:
         child = _get_named_child(base_value, field_name)
@@ -252,6 +284,29 @@ def _resolve_pointer_impl(value, allow_object_address, depth, seen_ids):
                 kind="wrapped_pointer",
                 matched_path=matched_path,
             )
+
+    if _looks_like_pointer_wrapper_type(type_name) or not allow_object_address:
+        for index in range(_safe_num_children(base_value)):
+            child = _safe_child_at_index(base_value, index)
+            if not child:
+                continue
+            resolved = _resolve_pointer_impl(
+                child,
+                allow_object_address=False,
+                depth=depth + 1,
+                seen_ids=seen_ids,
+            )
+            if resolved.kind != "invalid":
+                child_name = _safe_child_name(child)
+                matched_path = resolved.matched_path
+                if child_name:
+                    matched_path = (child_name,) + matched_path
+                return PointerResolution(
+                    address=resolved.address,
+                    pointee=resolved.pointee,
+                    kind="wrapped_pointer",
+                    matched_path=matched_path,
+                )
 
     if allow_object_address:
         return PointerResolution(

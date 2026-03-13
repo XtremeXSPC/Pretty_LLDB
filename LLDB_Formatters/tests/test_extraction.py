@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock
 
 from LLDB_Formatters.config import g_config
 from LLDB_Formatters.extraction import (
@@ -7,6 +8,67 @@ from LLDB_Formatters.extraction import (
     extract_tree_structure,
 )
 from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
+
+
+def _make_raw_pointer(pointee, name="ptr", type_name="MockNode*"):
+    if pointee is None:
+        return MockSBValue(value=0, is_pointer=True, name=name, type_name=type_name)
+    return MockSBValue(
+        value=id(pointee),
+        is_pointer=True,
+        name=name,
+        type_name=type_name,
+        pointee=pointee,
+    )
+
+
+def _make_debug_vector(items, type_name="std::__debug::vector<MockNode*>"):
+    elem_type = Mock()
+    elem_type.GetByteSize.return_value = 8
+
+    begin_addr = 0x1000
+    address_map = {}
+    for index, item in enumerate(items):
+        address_map[begin_addr + (index * 8)] = _make_raw_pointer(item, name=f"[{index}]")
+
+    begin_ptr = MockSBValue(begin_addr, is_pointer=True, name="_M_start", type_name="MockNode**")
+    begin_ptr.GetType().GetPointeeType.return_value = elem_type
+    end_ptr = MockSBValue(
+        begin_addr + (len(items) * 8),
+        is_pointer=True,
+        name="_M_finish",
+        type_name="MockNode**",
+    )
+    end_cap_ptr = MockSBValue(
+        begin_addr + (len(items) * 8),
+        is_pointer=True,
+        name="_M_end_of_storage",
+        type_name="MockNode**",
+    )
+
+    return MockSBValue(
+        children={
+            "safe": MockSBValue(name="safe", type_name="__gnu_debug::_Safe_container"),
+            "base": MockSBValue(
+                children={
+                    "_M_impl": MockSBValue(
+                        children={
+                            "_M_start": begin_ptr,
+                            "_M_finish": end_ptr,
+                            "_M_end_of_storage": end_cap_ptr,
+                        },
+                        name="_M_impl",
+                        type_name="_Vector_impl",
+                    )
+                },
+                name="std::__cxx1998::vector<MockNode*>",
+                type_name="std::__cxx1998::vector<MockNode*>",
+            ),
+            "cap": MockSBValue(name="cap", type_name="__gnu_debug::_Safe_vector"),
+        },
+        type_name=type_name,
+        address_map=address_map,
+    )
 
 
 def _make_right_skewed_tree(depth):
@@ -99,6 +161,58 @@ class TestExtractionLayer(unittest.TestCase):
 
         self.assertEqual(extraction.nodes_field, "nodes")
         self.assertEqual(extraction.num_nodes, 3)
+        addresses_by_value = {node.value: node.address for node in extraction.nodes}
+        self.assertEqual(
+            sorted((edge.source, edge.target) for edge in extraction.edges),
+            sorted(
+                [
+                    (addresses_by_value["10"], addresses_by_value["20"]),
+                    (addresses_by_value["10"], addresses_by_value["30"]),
+                    (addresses_by_value["20"], addresses_by_value["30"]),
+                ]
+            ),
+        )
+        self.assertEqual(extraction.neighbors_field, "neighbors")
+
+    def test_extract_graph_structure_supports_debug_vector_storage(self):
+        node_c = MockSBValue(
+            30,
+            {
+                "value": MockSBValue(30),
+                "neighbors": _make_debug_vector([], type_name="std::__debug::vector<TestGraphNode<int>*>"),
+            },
+            type_name="TestGraphNode<int>",
+        )
+        node_b = MockSBValue(
+            20,
+            {
+                "value": MockSBValue(20),
+                "neighbors": _make_debug_vector([node_c], type_name="std::__debug::vector<TestGraphNode<int>*>"),
+            },
+            type_name="TestGraphNode<int>",
+        )
+        node_a = MockSBValue(
+            10,
+            {
+                "value": MockSBValue(10),
+                "neighbors": _make_debug_vector([node_b, node_c], type_name="std::__debug::vector<TestGraphNode<int>*>"),
+            },
+            type_name="TestGraphNode<int>",
+        )
+        graph = MockSBValue(
+            children={
+                "nodes": _make_debug_vector(
+                    [node_a, node_b, node_c],
+                    type_name="std::__debug::vector<TestGraphNode<int>*>",
+                ),
+                "num_nodes": MockSBValue(3),
+            },
+            type_name="MyGraph<int>",
+        )
+
+        extraction = extract_graph_structure(graph)
+
+        self.assertEqual(sorted(node.value for node in extraction.nodes), ["10", "20", "30"])
         addresses_by_value = {node.value: node.address for node in extraction.nodes}
         self.assertEqual(
             sorted((edge.source, edge.target) for edge in extraction.edges),

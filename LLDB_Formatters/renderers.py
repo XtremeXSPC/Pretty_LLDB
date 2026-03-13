@@ -11,7 +11,11 @@ Version: 0.5.0.dev0
 """
 # ============================================================================ #
 
+import re
 from typing import Iterable, Optional
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _hex_address(address):
@@ -24,6 +28,12 @@ def _escape_dot_label(text):
     """Escape label text so it remains valid inside Graphviz DOT strings."""
 
     return str(text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def _strip_ansi(text):
+    """Remove ANSI color sequences so web and DOT renderers receive plain text."""
+
+    return _ANSI_ESCAPE_RE.sub("", str(text))
 
 
 def _sorted_tree_nodes(extracted_tree):
@@ -62,8 +72,8 @@ def build_list_renderer_payload(extracted_list):
         nodes_data.append(
             {
                 "id": node_id,
-                "label": node.value,
-                "value": node.value,
+                "label": _strip_ansi(node.value),
+                "value": _strip_ansi(node.value),
                 "address": node_id,
                 "index": index,
             }
@@ -116,7 +126,8 @@ def build_tree_renderer_payload(extracted_tree, traversal_order: Optional[Iterab
 
     nodes_data = []
     for node in _sorted_tree_nodes(extracted_tree):
-        label = node.value
+        plain_value = _strip_ansi(node.value)
+        label = plain_value
         if node.address in order_map:
             label = f"{order_map[node.address]}: {label}"
 
@@ -125,8 +136,8 @@ def build_tree_renderer_payload(extracted_tree, traversal_order: Optional[Iterab
             {
                 "id": node_id,
                 "label": label,
-                "value": node.value,
-                "title": f"Value: {node.value}\nAddress: {node_id}",
+                "value": plain_value,
+                "title": f"Value: {plain_value}\nAddress: {node_id}",
                 "address": node_id,
             }
         )
@@ -156,8 +167,8 @@ def build_graph_renderer_payload(extracted_graph, directed=True):
         nodes_data.append(
             {
                 "id": node_id,
-                "label": node.value,
-                "title": f"Value: {node.value}",
+                "label": _strip_ansi(node.value),
+                "title": f"Value: {_strip_ansi(node.value)}",
                 "address": node_id,
             }
         )

@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
+from .abi_layouts import iter_container_values
 from .helpers import get_child_member_by_names, get_raw_pointer, type_has_field
 from .pointers import get_nonsynthetic_value
 
@@ -577,8 +578,7 @@ def get_tree_children(node_struct, schema: Optional[TreeNodeSchema] = None):
             and children_container.IsValid()
             and children_container.MightHaveChildren()
         ):
-            for index in range(children_container.GetNumChildren()):
-                child = children_container.GetChildAtIndex(index)
+            for child in iter_container_values(children_container):
                 if child and get_raw_pointer(child) != 0:
                     children.append(child)
             return children

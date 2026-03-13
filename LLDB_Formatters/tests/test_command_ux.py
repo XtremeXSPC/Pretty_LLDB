@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
+import LLDB_Formatters as formatter_package
 from LLDB_Formatters.config import formatter_config_command
 from LLDB_Formatters.diagnostics import formatter_explain_command
 from LLDB_Formatters.graph import export_graph_command
@@ -53,6 +54,19 @@ def _make_debugger(
 
 
 class TestCommandUX(unittest.TestCase):
+    def test_formatter_registry_load_order_shows_synthetics_before_summaries(self):
+        ordered_items = formatter_package._iter_formatter_registry_in_load_order()
+
+        self.assertTrue(any(item["type"] == "synthetic" for item in ordered_items))
+        self.assertTrue(any(item["type"] == "summary" for item in ordered_items))
+
+        seen_summary = False
+        for item in ordered_items:
+            if item["type"] == "summary":
+                seen_summary = True
+            if item["type"] == "synthetic":
+                self.assertFalse(seen_summary)
+
     def test_formatter_explain_usage_is_specific(self):
         result = MockResult()
 

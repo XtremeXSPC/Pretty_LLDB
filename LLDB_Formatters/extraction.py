@@ -15,6 +15,7 @@ Version: 0.5.0.dev0
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+from .abi_layouts import iter_container_values
 from .helpers import (
     _safe_get_node_from_pointer,
     debug_print,
@@ -530,10 +531,8 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
 
     node_map: Dict[int, GraphNode] = {}
     edge_set = set()
-    for index in range(_safe_num_children(nodes_container)):
-        node = nodes_container.GetChildAtIndex(index)
-        if node and node.GetType().IsPointerType():
-            node = node.Dereference()
+    for index, node_entry in enumerate(iter_container_values(nodes_container)):
+        node = _safe_get_node_from_pointer(node_entry)
         if not node or not node.IsValid():
             diagnostics.warn(
                 "invalid_node",
@@ -541,7 +540,9 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
             )
             continue
 
-        node_addr = get_raw_pointer(node)
+        node_addr = get_raw_pointer(node_entry)
+        if node_addr == 0:
+            node_addr = get_raw_pointer(node)
         if node_addr == 0:
             diagnostics.warn(
                 "null_node",
@@ -563,10 +564,8 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
 
         neighbors = get_resolved_child(node, node_schema.neighbors_field)
         if neighbors and neighbors.IsValid():
-            for neighbor_index in range(_safe_num_children(neighbors)):
-                neighbor = neighbors.GetChildAtIndex(neighbor_index)
-                if neighbor and neighbor.GetType().IsPointerType():
-                    neighbor = neighbor.Dereference()
+            for neighbor_index, neighbor_entry in enumerate(iter_container_values(neighbors)):
+                neighbor = _safe_get_node_from_pointer(neighbor_entry)
                 if not neighbor or not neighbor.IsValid():
                     diagnostics.warn(
                         "invalid_neighbor",
@@ -574,7 +573,9 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
                     )
                     continue
 
-                neighbor_addr = get_raw_pointer(neighbor)
+                neighbor_addr = get_raw_pointer(neighbor_entry)
+                if neighbor_addr == 0:
+                    neighbor_addr = get_raw_pointer(neighbor)
                 if neighbor_addr == 0:
                     continue
 

@@ -33,6 +33,30 @@ def make_libcxx_unique_ptr(pointee, name="unique_ptr"):
     )
 
 
+def make_libstdcxx_unique_ptr(pointee, name="unique_ptr"):
+    raw_ptr = make_raw_pointer(pointee, name="_M_head_impl")
+    head_base = MockSBValue(
+        children={"_M_head_impl": raw_ptr},
+        name="std::_Head_base<0, int *, false>",
+        type_name="std::_Head_base<0, int *, false>",
+    )
+    tuple_impl = MockSBValue(
+        children={"std::_Head_base<0, int *, false>": head_base},
+        name="std::_Tuple_impl<0, int *, std::default_delete<int> >",
+        type_name="std::_Tuple_impl<0, int *, std::default_delete<int> >",
+    )
+    uniq_impl = MockSBValue(
+        children={"_M_t": tuple_impl},
+        name="_M_t",
+        type_name="std::__uniq_ptr_impl<int, std::default_delete<int> >",
+    )
+    return MockSBValue(
+        children={"_M_t": uniq_impl},
+        name=name,
+        type_name="std::unique_ptr<int, std::default_delete<int> >",
+    )
+
+
 class TestPointerResolution(unittest.TestCase):
     def test_resolve_raw_pointer(self):
         node = MockSBValue(42, {"value": MockSBValue(42)}, name="node")
@@ -64,6 +88,20 @@ class TestPointerResolution(unittest.TestCase):
         self.assertEqual(resolution.kind, "wrapped_pointer")
         self.assertEqual(resolution.address, id(node))
         self.assertEqual(resolution.matched_path, ("__ptr_", "__value_"))
+        self.assertIs(_safe_get_node_from_pointer(unique_ptr), node)
+
+    def test_resolve_libstdcxx_unique_ptr_tuple_storage(self):
+        node = MockSBValue(77, {"value": MockSBValue(77)}, name="node")
+        unique_ptr = make_libstdcxx_unique_ptr(node)
+
+        resolution = resolve_pointer_like(unique_ptr)
+
+        self.assertEqual(resolution.kind, "wrapped_pointer")
+        self.assertEqual(resolution.address, id(node))
+        self.assertEqual(
+            resolution.matched_path,
+            ("_M_t", "_M_t", "std::_Head_base<0, int *, false>", "_M_head_impl"),
+        )
         self.assertIs(_safe_get_node_from_pointer(unique_ptr), node)
 
     def test_extract_linear_structure_with_unique_ptr_head_and_next(self):
@@ -124,6 +162,73 @@ class TestPointerResolution(unittest.TestCase):
         )
         tree = MockSBValue(
             children={"root": make_libcxx_unique_ptr(root, name="root"), "size": MockSBValue(3)},
+            type_name="MyTree<int>",
+        )
+
+        extraction = extract_tree_structure(tree)
+
+        self.assertEqual(sorted(node.value for node in extraction.nodes), ["1", "2", "3"])
+        self.assertEqual(len(extraction.edges), 2)
+        self.assertEqual(extraction.child_mode, "binary")
+
+    def test_extract_linear_structure_with_libstdcxx_unique_ptr_head_and_next(self):
+        node3 = MockSBValue(
+            30,
+            {
+                "value": MockSBValue(30),
+                "next": make_libstdcxx_unique_ptr(None, name="next"),
+            },
+            name="node3",
+        )
+        node2 = MockSBValue(
+            20,
+            {
+                "value": MockSBValue(20),
+                "next": make_libstdcxx_unique_ptr(node3, name="next"),
+            },
+            name="node2",
+        )
+        linear = MockSBValue(
+            children={"head": make_libstdcxx_unique_ptr(node2, name="head"), "size": MockSBValue(2)},
+            type_name="MyLinkedList<int>",
+        )
+
+        extraction = extract_linear_structure(linear, max_items=10)
+
+        self.assertEqual([node.value for node in extraction.nodes], ["20", "30"])
+        self.assertEqual(extraction.size, 2)
+        self.assertFalse(extraction.is_empty)
+
+    def test_extract_tree_structure_with_libstdcxx_unique_ptr_root_and_children(self):
+        left = MockSBValue(
+            1,
+            {
+                "value": MockSBValue(1),
+                "left": make_libstdcxx_unique_ptr(None, name="left"),
+                "right": make_libstdcxx_unique_ptr(None, name="right"),
+            },
+            name="left",
+        )
+        right = MockSBValue(
+            3,
+            {
+                "value": MockSBValue(3),
+                "left": make_libstdcxx_unique_ptr(None, name="left"),
+                "right": make_libstdcxx_unique_ptr(None, name="right"),
+            },
+            name="right",
+        )
+        root = MockSBValue(
+            2,
+            {
+                "value": MockSBValue(2),
+                "left": make_libstdcxx_unique_ptr(left, name="left"),
+                "right": make_libstdcxx_unique_ptr(right, name="right"),
+            },
+            name="root",
+        )
+        tree = MockSBValue(
+            children={"root": make_libstdcxx_unique_ptr(root, name="root"), "size": MockSBValue(3)},
             type_name="MyTree<int>",
         )
 
