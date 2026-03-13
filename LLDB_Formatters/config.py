@@ -1,11 +1,15 @@
-# ----------------------------------------------------------------------- #
-# FILE: config.py
-#
-# DESCRIPTION:
-# This module implements the user-facing configuration command for the
-# formatters. It centralizes all global settings into a single
-# configuration object, 'g_config', making them easy to manage.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Runtime configuration support for Pretty LLDB.
+
+This module defines the formatter settings exposed to users, provides the
+parsing and validation helpers behind the `formatter_config` command, and keeps
+the shared configuration singleton used by the formatter package.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 import shlex
 from dataclasses import dataclass
@@ -15,6 +19,8 @@ from .command_helpers import set_argument_parse_error, usage_message
 
 @dataclass(frozen=True)
 class FormatterSettingSpec:
+    """Describe one user-facing formatter setting and its validation contract."""
+
     key: str
     default: object
     description: str
@@ -72,6 +78,8 @@ SETTING_SPECS_BY_KEY = {spec.key: spec for spec in SETTING_SPECS}
 
 
 def _parse_bool(value_str):
+    """Parse a boolean command argument using the accepted LLDB-facing aliases."""
+
     normalized = value_str.strip().lower()
     truth_map = {
         "1": True,
@@ -91,6 +99,8 @@ def _parse_bool(value_str):
 
 
 def _parse_non_negative_int(value_str):
+    """Convert a setting value to a non-negative integer or raise a clear error."""
+
     try:
         value = int(value_str)
     except ValueError as error:
@@ -104,6 +114,8 @@ def _parse_non_negative_int(value_str):
 
 
 def _parse_choice(value_str, spec):
+    """Validate a choice-based setting against the options declared in `spec`."""
+
     normalized = value_str.lower()
     if normalized not in spec.choices:
         raise ValueError(
@@ -113,6 +125,8 @@ def _parse_choice(value_str, spec):
 
 
 def _parse_setting_value(spec, value_str):
+    """Dispatch setting parsing based on the value kind declared by the spec."""
+
     if spec.value_kind == "integer":
         return _parse_non_negative_int(value_str)
     if spec.value_kind == "boolean":
@@ -123,12 +137,16 @@ def _parse_setting_value(spec, value_str):
 
 
 def _format_setting_value(value):
+    """Render a setting value in the same style used by command output."""
+
     if isinstance(value, str):
         return f"'{value}'"
     return str(value)
 
 
 def _setting_usage(spec):
+    """Build the per-setting usage suffix displayed by `formatter_config`."""
+
     if spec.value_kind == "choice":
         return f"{spec.key} <{'|'.join(spec.choices)}>"
     if spec.value_kind == "boolean":
@@ -138,14 +156,19 @@ def _setting_usage(spec):
 
 class FormatterConfig:
     """
-    A centralized class to hold all global configuration settings for the formatters.
-    An instance of this class is created as a global singleton 'g_config'.
+    Store the active runtime configuration shared by all formatter entry points.
+
+    The object is intentionally lightweight: it only exposes the current setting
+    values and offers a `reset()` helper that re-applies the defaults declared
+    in `SETTING_SPECS`.
     """
 
     def __init__(self):
         self.reset()
 
     def reset(self):
+        """Restore every formatter setting to its declared default value."""
+
         for spec in SETTING_SPECS:
             setattr(self, spec.key, spec.default)
 
@@ -155,6 +178,8 @@ g_config = FormatterConfig()
 
 
 def _append_settings_overview(result):
+    """Write the full setting table to an LLDB command result object."""
+
     result.AppendMessage("Current formatter settings:")
     for spec in SETTING_SPECS:
         current_value = getattr(g_config, spec.key)
@@ -174,6 +199,8 @@ def _append_settings_overview(result):
 
 
 def _append_setting_detail(result, spec):
+    """Write a detailed description for a single formatter setting."""
+
     current_value = getattr(g_config, spec.key)
     result.AppendMessage(f"{spec.key} = {_format_setting_value(current_value)}")
     result.AppendMessage(f"Default: {_format_setting_value(spec.default)}")
@@ -186,12 +213,12 @@ def _append_setting_detail(result, spec):
 
 def formatter_config_command(debugger, command, result, internal_dict):
     """
-    Implements the 'formatter_config' command to view and change global settings.
-    Usage:
-      formatter_config
-      formatter_config <setting>
-      formatter_config <setting> <value>
-      formatter_config reset
+    Implement the `formatter_config` LLDB command.
+
+    The command supports three read paths: showing the full configuration,
+    inspecting one setting, and resetting every setting to defaults. When a
+    value is supplied, the command validates it using the metadata in
+    `SETTING_SPECS` before updating the shared configuration object.
     """
     try:
         args = shlex.split(command)

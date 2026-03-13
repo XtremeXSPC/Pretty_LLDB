@@ -1,28 +1,16 @@
-# ----------------------------------------------------------------------- #
-# FILE: web_visualizer.py
-#
-# DESCRIPTION:
-# This module implements advanced, interactive data structure
-# visualizations by generating self-contained HTML files that use the
-# 'vis.js' JavaScript library.
-#
-# It provides three main commands:
-#   - 'export_list_web': Generates an interactive, linear view of a
-#     linked list with traversal animation.
-#   - 'export_tree_web': Generates an interactive, hierarchical view
-#     of a tree structure.
-#   - 'export_graph_web': Generates an interactive, physics-based
-#     force-directed layout of a graph structure.
-#
-# The generated HTML file is automatically opened in the user's
-# default web browser.
-#
-# NOTE: ON DESIGN
-# This module intentionally does NOT use the TraversalStrategy classes.
-# The strategies are designed to produce linear text summaries, while the
-# web visualizer needs the full structural information of the data
-# (nodes, edges, addresses) to render it graphically.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Interactive HTML visualizers for Pretty LLDB structures.
+
+This module turns extracted list, tree, and graph data into self-contained
+HTML pages backed by the bundled `vis.js` assets. It also provides the LLDB
+commands that validate a structure, generate the HTML, and display it either
+through CodeLLDB or a fallback browser workflow.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 import json
 import os
@@ -55,9 +43,8 @@ from .visualization_options import create_tree_traversal_strategy, parse_graph_r
 
 
 def _load_static_file(file_path):
-    """
-    Generic helper to load a static file from the templates/static directory.
-    """
+    """Load one bundled static asset used by the HTML visualizer templates."""
+
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(script_dir, "templates/static", file_path)
@@ -69,25 +56,29 @@ def _load_static_file(file_path):
 
 
 def _load_visjs_library():
-    """Loads the content of the vis-network.min.js library."""
+    """Return the bundled `vis-network.min.js` payload."""
+
     return _load_static_file("vis-network.min.js")
 
 
 def _load_shared_css():
-    """Loads the content of style.css."""
+    """Return the shared stylesheet injected into visualizer pages."""
+
     return _load_static_file("style.css")
 
 
 def _load_shared_js():
-    """Loads the content of common.js."""
+    """Return the shared JavaScript helpers injected into visualizer pages."""
+
     return _load_static_file("common.js")
 
 
 def _build_visjs_data_for_list(valobj):
     """
-    Traverses a linked list SBValue and returns all data required for its
-    vis.js visualization in a dictionary.
-    Returns None if the list is empty or its structure cannot be determined.
+    Extract and convert a list value into the payload expected by the renderer.
+
+    The helper returns `None` when the structure is empty or unsupported, which
+    allows the caller to reuse a single validation path for LLDB commands.
     """
     extracted_list = extract_linear_structure(valobj)
     if extracted_list.error_message or extracted_list.is_empty:
@@ -97,9 +88,10 @@ def _build_visjs_data_for_list(valobj):
 
 def _build_visjs_data_for_graph(valobj, directed=True):
     """
-    Traverses a graph SBValue and returns all data needed for its
-    vis.js visualization in a dictionary.
-    Returns None if the graph is empty or its structure cannot be determined.
+    Extract and convert a graph value into the payload expected by the renderer.
+
+    The `directed` flag only affects the rendered edge semantics; extraction
+    still operates on the same normalized graph model.
     """
     extracted_graph = extract_graph_structure(valobj)
     if extracted_graph.is_empty or extracted_graph.error_message:
@@ -115,8 +107,10 @@ def _build_visjs_data_for_graph(valobj, directed=True):
 
 def _generate_html(template_name, template_data):
     """
-    Generic private helper to load an HTML template, substitute placeholders
-    with data, and return the final HTML string.
+    Materialize one HTML visualizer template with the provided payload data.
+
+    Shared CSS, JavaScript, and the embedded vis.js library are injected here
+    so the generated output remains fully self-contained.
     """
     template_data["__VISJS_LIBRARY__"] = _load_visjs_library()
     template_data["__SHARED_CSS__"] = _load_shared_css()
@@ -137,8 +131,10 @@ def _generate_html(template_name, template_data):
 
 def generate_list_visualization_html(valobj):
     """
-    Takes a list SBValue and returns a complete, self-contained HTML string
-    for its visualization. Returns None if data generation fails.
+    Generate the full HTML document used to visualize a linear container.
+
+    The returned document contains both the vis.js payload and a compact table
+    with the most relevant metadata about the selected list variable.
     """
     list_data = _build_visjs_data_for_list(valobj)
     if not list_data:
@@ -169,9 +165,10 @@ def generate_list_visualization_html(valobj):
 
 def generate_tree_visualization_html(valobj, traversal_name=None):
     """
-    Takes a tree SBValue and returns a complete, self-contained HTML string
-    for its visualization. Returns None if the tree is empty.
-    This function is designed to be imported by other modules (e.g., tree.py).
+    Generate the full HTML document used to visualize a tree container.
+
+    When a traversal name is supplied, the corresponding strategy is resolved
+    and its visit order is embedded so the page can annotate that sequence.
     """
     extracted_tree = extract_tree_structure(valobj)
     if extracted_tree.is_empty or extracted_tree.error_message:
@@ -215,8 +212,10 @@ def generate_tree_visualization_html(valobj, traversal_name=None):
 
 def generate_graph_visualization_html(valobj, directed=True):
     """
-    Takes a graph SBValue and returns a complete, self-contained HTML string
-    for its visualization. Returns None if data generation fails.
+    Generate the full HTML document used to visualize a graph container.
+
+    The resulting page includes graph metadata and the node/edge payload needed
+    by the interactive front-end renderer.
     """
     extracted_graph = extract_graph_structure(valobj)
     if extracted_graph.is_empty or extracted_graph.error_message:
@@ -256,9 +255,10 @@ def generate_graph_visualization_html(valobj, directed=True):
 
 def _display_html_content(html_content, var_name, result):
     """
-    Handles displaying the generated HTML. It attempts to use the direct
-    CodeLLDB API first, and falls back to opening a file in the default
-    web browser if the API is not available (e.g., in a standard terminal).
+    Display generated HTML through CodeLLDB or a browser-based fallback.
+
+    This helper centralizes the environment-dependent display logic so the
+    export commands only need to focus on validation and payload generation.
     """
     if not html_content:
         result.AppendMessage(
@@ -294,6 +294,8 @@ def _display_html_content(html_content, var_name, result):
 
 
 def _validate_visualizable_structure(result, structure_name, extraction):
+    """Validate that a structure is supported and non-empty before rendering."""
+
     if extraction.error_message:
         result.SetError(unsupported_layout_message(structure_name))
         return False
@@ -304,7 +306,8 @@ def _validate_visualizable_structure(result, structure_name, extraction):
 
 
 def export_list_web_command(debugger, command, result, internal_dict):
-    """Implements the 'weblist' command."""
+    """Generate and display the interactive HTML visualizer for a list."""
+
     _, var_name, valobj = resolve_command_variable(
         debugger,
         command,
@@ -321,7 +324,8 @@ def export_list_web_command(debugger, command, result, internal_dict):
 
 
 def export_tree_web_command(debugger, command, result, internal_dict):
-    """Implements the 'webtree' command."""
+    """Generate and display the interactive HTML visualizer for a tree."""
+
     args, var_name, valobj = resolve_command_variable(
         debugger,
         command,
@@ -348,7 +352,8 @@ def export_tree_web_command(debugger, command, result, internal_dict):
 
 
 def export_graph_web_command(debugger, command, result, internal_dict):
-    """Implements the 'webgraph' command."""
+    """Generate and display the interactive HTML visualizer for a graph."""
+
     args, var_name, valobj = resolve_command_variable(
         debugger,
         command,

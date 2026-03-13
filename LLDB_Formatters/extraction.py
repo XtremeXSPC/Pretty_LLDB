@@ -1,3 +1,17 @@
+# ============================================================================ #
+"""
+Shared extraction layer for Pretty LLDB structure formatters.
+
+This module converts supported LLDB values into normalized linear, tree, and
+graph extraction models. The resulting structures carry both the extracted data
+used by summaries and renderers and the diagnostics needed to explain how field
+resolution and traversal behaved.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
+
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -24,6 +38,8 @@ from .schema_adapters import (
 
 @dataclass
 class FieldResolution:
+    """Record how one semantic field role was matched during extraction."""
+
     role: str
     candidates: Tuple[str, ...]
     matched: Optional[str]
@@ -31,17 +47,23 @@ class FieldResolution:
 
 @dataclass
 class ExtractionWarning:
+    """Represent one warning emitted while extracting a structure."""
+
     code: str
     message: str
 
 
 @dataclass
 class ExtractionDiagnostics:
+    """Collect field-resolution traces and warnings for one extraction pass."""
+
     structure_kind: str
     field_resolutions: List[FieldResolution] = field(default_factory=list)
     warnings: List[ExtractionWarning] = field(default_factory=list)
 
     def record_resolution(self, role: str, candidates: List[str], matched: Optional[str]) -> None:
+        """Record the candidate set and final match for one semantic role."""
+
         debug_print(
             f"[{self.structure_kind}] resolve {role}: matched={matched or '<unresolved>'}, candidates={candidates}"
         )
@@ -50,10 +72,14 @@ class ExtractionDiagnostics:
         )
 
     def warn(self, code: str, message: str) -> None:
+        """Append one warning and mirror it to debug logging when enabled."""
+
         debug_print(f"[{self.structure_kind}] warning {code}: {message}")
         self.warnings.append(ExtractionWarning(code=code, message=message))
 
     def compact_summary(self) -> str:
+        """Render diagnostics as a compact suffix suitable for formatter summaries."""
+
         parts = []
 
         matched_fields = [
@@ -76,6 +102,8 @@ class ExtractionDiagnostics:
 
 @dataclass
 class LinearNode:
+    """Represent one extracted node in a linear structure traversal."""
+
     address: int
     value: str
     next_address: int = 0
@@ -83,6 +111,8 @@ class LinearNode:
 
 @dataclass
 class ExtractedLinearStructure:
+    """Normalized extraction result for lists, stacks, queues, and similar chains."""
+
     diagnostics: ExtractionDiagnostics = field(
         default_factory=lambda: ExtractionDiagnostics("linear")
     )
@@ -100,11 +130,15 @@ class ExtractedLinearStructure:
 
     @property
     def traversal_order(self) -> List[str]:
+        """Return the visited node addresses in display-friendly hex form."""
+
         return [f"0x{node.address:x}" for node in self.nodes]
 
 
 @dataclass
 class TreeNode:
+    """Represent one extracted tree node and the addresses of its children."""
+
     address: int
     value: str
     children: List[int] = field(default_factory=list)
@@ -112,12 +146,16 @@ class TreeNode:
 
 @dataclass
 class TreeEdge:
+    """Represent one directed parent-child edge in an extracted tree."""
+
     source: int
     target: int
 
 
 @dataclass
 class ExtractedTreeStructure:
+    """Normalized extraction result for binary and n-ary tree structures."""
+
     diagnostics: ExtractionDiagnostics = field(
         default_factory=lambda: ExtractionDiagnostics("tree")
     )
@@ -135,12 +173,16 @@ class ExtractedTreeStructure:
 
 @dataclass
 class GraphEdge:
+    """Represent one directed edge recorded during graph extraction."""
+
     source: int
     target: int
 
 
 @dataclass
 class GraphNode:
+    """Represent one extracted graph node and its neighbor addresses."""
+
     address: int
     value: str
     neighbors: List[int] = field(default_factory=list)
@@ -148,6 +190,8 @@ class GraphNode:
 
 @dataclass
 class ExtractedGraphStructure:
+    """Normalized extraction result for adjacency-list-style graph structures."""
+
     diagnostics: ExtractionDiagnostics = field(
         default_factory=lambda: ExtractionDiagnostics("graph")
     )
@@ -165,6 +209,8 @@ class ExtractedGraphStructure:
 
 
 def _resolve_child_field(value, role: str, candidates: List[str], diagnostics):
+    """Resolve one child field by candidate names and record the diagnostic result."""
+
     matched_name = None
     matched_child = None
 
@@ -182,6 +228,8 @@ def _resolve_child_field(value, role: str, candidates: List[str], diagnostics):
 
 
 def _resolve_type_field_name(type_obj, role: str, candidates: List[str], diagnostics):
+    """Resolve one field name directly from type metadata and record the outcome."""
+
     matched_name = None
 
     if type_obj:
@@ -195,6 +243,8 @@ def _resolve_type_field_name(type_obj, role: str, candidates: List[str], diagnos
 
 
 def _resolve_existing_child_name(value, role: str, candidates: List[str], diagnostics):
+    """Resolve the first existing child name from a candidate list."""
+
     matched_name = None
 
     base_value = get_nonsynthetic_value(value)
@@ -210,6 +260,8 @@ def _resolve_existing_child_name(value, role: str, candidates: List[str], diagno
 
 
 def _safe_num_children(value) -> int:
+    """Return the number of visible children for a value with a safe fallback."""
+
     base_value = get_nonsynthetic_value(value)
     if not base_value or not base_value.IsValid():
         return 0
@@ -220,6 +272,8 @@ def _safe_num_children(value) -> int:
 
 
 def detect_structure_kind(valobj) -> Optional[str]:
+    """Infer whether a value looks like a supported linear, tree, or graph container."""
+
     if resolve_linear_container_schema(valobj).head_field:
         return "linear"
     if resolve_tree_container_schema(valobj).root_field:
@@ -230,6 +284,8 @@ def detect_structure_kind(valobj) -> Optional[str]:
 
 
 def extract_supported_structure(valobj, max_items: Optional[int] = None):
+    """Detect a supported structure kind and run the matching extraction routine."""
+
     structure_kind = detect_structure_kind(valobj)
     if structure_kind == "linear":
         return structure_kind, extract_linear_structure(valobj, max_items=max_items)
@@ -241,6 +297,8 @@ def extract_supported_structure(valobj, max_items: Optional[int] = None):
 
 
 def extract_linear_structure(valobj, max_items: Optional[int] = None) -> ExtractedLinearStructure:
+    """Extract a normalized linear structure model from a list-like container."""
+
     diagnostics = ExtractionDiagnostics("linear")
     container_schema = resolve_linear_container_schema(valobj, diagnostics)
 
@@ -338,6 +396,8 @@ def extract_linear_structure(valobj, max_items: Optional[int] = None) -> Extract
 
 
 def extract_tree_structure(valobj) -> ExtractedTreeStructure:
+    """Extract a normalized tree model while enforcing depth and cycle safeguards."""
+
     diagnostics = ExtractionDiagnostics("tree")
     container_schema = resolve_tree_container_schema(valobj, diagnostics)
 
@@ -441,6 +501,8 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
 
 
 def extract_graph_structure(valobj) -> ExtractedGraphStructure:
+    """Extract a normalized graph model from an adjacency-list-style container."""
+
     diagnostics = ExtractionDiagnostics("graph")
     container_schema = resolve_graph_container_schema(valobj, diagnostics)
 

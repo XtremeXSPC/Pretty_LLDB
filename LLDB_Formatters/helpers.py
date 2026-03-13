@@ -1,17 +1,15 @@
-# ----------------------------------------------------------------------- #
-# FILE: helpers.py
-#
-# DESCRIPTION:
-# This module provides a collection of shared utility functions, global
-# configuration variables, and constants used across the entire
-# 'LLDB_Formatters' package.
-#
-# It centralizes common logic to avoid code duplication and includes:
-#   - Generic helper functions to interact with LLDB's SBValue and SBType.
-#   - Access to the global configuration object 'g_config'.
-#   - ANSI color code definitions for colored console output.
-#   - A conditional debug printing utility.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Shared low-level helpers for Pretty LLDB.
+
+This module collects the utility functions used across the formatter package:
+LLDB value inspection helpers, debug logging support, ANSI color constants, and
+display-oriented rendering helpers for common STL-like payloads.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 import os
 
@@ -27,6 +25,8 @@ from .pointers import (
 # ----- ANSI Color Codes ----- #
 # A simple class to hold ANSI escape sequences for colored console output.
 class Colors:
+    """ANSI escape sequences used by console-oriented formatter output."""
+
     RESET = "\x1b[0m"
     BOLD_CYAN = "\x1b[1;36m"
     YELLOW = "\x1b[33m"
@@ -40,7 +40,8 @@ SUMMARY_TRUNCATION_MARKER = "..."
 
 
 def debug_print(message):
-    """Prints a message only if debugging is enabled."""
+    """Emit a formatter debug message only when debug logging is enabled."""
+
     if getattr(g_config, "debug_enabled", False):
         print(f"[Formatter Debug] {message}")
 
@@ -50,17 +51,21 @@ def debug_print(message):
 
 def should_use_colors():
     """
-    Returns True if the script is likely running in a terminal that
-    supports ANSI color codes (like CodeLLDB's debug console or a standard terminal).
-    Checks for the 'TERM_PROGRAM' environment variable set by VS Code.
+    Return whether console output should include ANSI color codes.
+
+    The formatter currently treats the VS Code terminal environment as the
+    primary signal that colored console output is appropriate.
     """
     return os.environ.get("TERM_PROGRAM") == "vscode"
 
 
 def type_has_field(type_obj, field_name):
     """
-    Checks if an SBType has a data member with the given name by iterating
-    through its fields. This is more reliable than GetChildMemberWithName.
+    Check whether an `SBType` exposes a field with the requested name.
+
+    The helper inspects the type metadata directly instead of relying on child
+    lookup, which can be less predictable for synthetic or display-oriented
+    values.
     """
     for i in range(type_obj.GetNumberOfFields()):
         if type_obj.GetFieldAtIndex(i).GetName() == field_name:
@@ -70,8 +75,11 @@ def type_has_field(type_obj, field_name):
 
 def get_child_member_by_names(value, names):
     """
-    Attempts to find and return the first valid child member from a list of
-    possible common names (e.g., ["_head", "m_head", "head"]).
+    Return the first valid child matching one of the provided candidate names.
+
+    The lookup is performed on the non-synthetic view of the value so the
+    formatter can inspect the real storage fields rather than presentation-only
+    children.
     """
     base_value = get_nonsynthetic_value(value)
     if not base_value or not base_value.IsValid():
@@ -84,6 +92,8 @@ def get_child_member_by_names(value, names):
 
 
 def _get_display_child_by_names(value, names):
+    """Resolve a child from the display value first, then fall back to raw lookup."""
+
     if not value or not value.IsValid():
         return None
 
@@ -96,6 +106,8 @@ def _get_display_child_by_names(value, names):
 
 
 def _normalize_summary_text(summary):
+    """Normalize LLDB summary text by trimming whitespace and outer quotes."""
+
     if summary is None:
         return None
 
@@ -106,6 +118,8 @@ def _normalize_summary_text(summary):
 
 
 def _safe_type_name(value_child):
+    """Read a value type name without propagating LLDB access failures."""
+
     try:
         return value_child.GetTypeName() or ""
     except Exception:
@@ -113,6 +127,8 @@ def _safe_type_name(value_child):
 
 
 def _safe_value_text(value_child):
+    """Read the raw value text from an `SBValue` while swallowing LLDB errors."""
+
     try:
         return value_child.GetValue()
     except Exception:
@@ -120,6 +136,8 @@ def _safe_value_text(value_child):
 
 
 def _safe_num_children(value_child):
+    """Read the child count of an `SBValue` with a defensive fallback to zero."""
+
     try:
         return value_child.GetNumChildren()
     except Exception:
@@ -127,6 +145,8 @@ def _safe_num_children(value_child):
 
 
 def _safe_child_name(value_child):
+    """Read a child name while tolerating LLDB exceptions."""
+
     try:
         return value_child.GetName()
     except Exception:
@@ -134,6 +154,8 @@ def _safe_child_name(value_child):
 
 
 def _safe_child_at_index(value_child, index):
+    """Read one child by index while tolerating LLDB exceptions."""
+
     try:
         return value_child.GetChildAtIndex(index)
     except Exception:
@@ -141,10 +163,14 @@ def _safe_child_at_index(value_child, index):
 
 
 def _looks_like_std_type(type_name, token):
+    """Return whether a type name appears to contain the requested STL token."""
+
     return token in type_name.lower()
 
 
 def _get_nested_child_by_paths(value_child, paths):
+    """Follow candidate field paths and return the first valid nested child found."""
+
     for path in paths:
         current = value_child
         for field_name in path:
@@ -157,6 +183,8 @@ def _get_nested_child_by_paths(value_child, paths):
 
 
 def _find_descendant_child_by_names(value_child, names, max_depth=6, seen_ids=None):
+    """Search descendants recursively for one child matching any candidate name."""
+
     if max_depth < 0 or not value_child or not value_child.IsValid():
         return None
 
@@ -189,6 +217,8 @@ def _find_descendant_child_by_names(value_child, names, max_depth=6, seen_ids=No
 
 
 def _parse_bool_like(child):
+    """Interpret a value or summary text as a boolean-like flag when possible."""
+
     if not child or not child.IsValid():
         return None
 
@@ -207,6 +237,8 @@ def _parse_bool_like(child):
 
 
 def _render_optional_like(value_child):
+    """Render an optional-like STL wrapper using its engaged flag and payload."""
+
     engaged_child = _get_nested_child_by_paths(
         value_child,
         [
@@ -252,6 +284,8 @@ def _render_optional_like(value_child):
 
 
 def _render_pair_like(value_child):
+    """Render a pair-like object as `(first, second)` when its fields are visible."""
+
     first = _get_display_child_by_names(value_child, ["first"])
     second = _get_display_child_by_names(value_child, ["second"])
     if not first and not second:
@@ -263,6 +297,8 @@ def _render_pair_like(value_child):
 
 
 def _render_tuple_like(value_child):
+    """Render tuple-like children in index order when LLDB exposes them directly."""
+
     items = []
     for index in range(_safe_num_children(value_child)):
         child = value_child.GetChildAtIndex(index)
@@ -278,6 +314,8 @@ def _render_tuple_like(value_child):
 
 
 def _render_string_view_like(value_child):
+    """Render a string-view-like object using its visible size metadata."""
+
     size_member = _get_display_child_by_names(
         value_child,
         ["__size_", "_M_len", "size", "_M_size"],
@@ -297,8 +335,12 @@ def _render_string_view_like(value_child):
 
 def get_value_summary(value_child):
     """
-    Extracts a displayable string from a value SBValue. It prefers the
-    type's summary (e.g., for std::string) but falls back to its raw value.
+    Return the best display string available for one `SBValue`.
+
+    The helper prefers high-level LLDB summaries, but it also contains targeted
+    handling for optional-like, pair-like, tuple-like, and string-view-like
+    standard-library values so user-facing formatter output avoids leaking
+    internal implementation details whenever possible.
     """
     if not value_child or not value_child.IsValid():
         return f"{Colors.RED}[invalid]{Colors.RESET}"
@@ -344,8 +386,11 @@ def get_value_summary(value_child):
 
 def _safe_get_node_from_pointer(node_ptr):
     """
-    Safely gets the underlying TreeNode struct from an SBValue that can be
-    a raw pointer or a smart pointer, returning the SBValue for the struct.
+    Resolve a pointer-like node reference and dereference it safely.
+
+    The helper accepts raw pointers, smart pointers, and pointer-like wrappers
+    handled by the pointer-resolution layer, while also emitting debug details
+    that explain how the dereference was resolved.
     """
     if not node_ptr or not node_ptr.IsValid():
         return None
@@ -369,15 +414,10 @@ def _safe_get_node_from_pointer(node_ptr):
 
 def _get_node_children(node_struct):
     """
-    Gets a list of children for a given tree node SBValue. This function is
-    adaptive and handles both n-ary trees (which have a 'children' container member)
-    and binary trees (which have 'left' and 'right' members).
+    Return child node references from either n-ary or binary tree layouts.
 
-    Args:
-        node_struct: The SBValue of the dereferenced node struct.
-
-    Returns:
-        A list of SBValue objects, where each is a pointer/smart_ptr to a child node.
+    The helper first looks for a container-style `children` member and, when it
+    is absent, falls back to the classic `left` / `right` binary-tree fields.
     """
     children = []
 

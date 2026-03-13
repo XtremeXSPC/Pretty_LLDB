@@ -1,20 +1,16 @@
-# ----------------------------------------------------------------------- #
-# FILE: tree.py
-#
-# DESCRIPTION:
-# This module contains all logic for formatting and visualizing tree
-# data structures.
-#
-# It has been refactored to use the Strategy pattern, where the traversal
-# logic (pre-order, in-order, etc.) is encapsulated in strategy classes.
-# This allows for runtime selection of the traversal method and cleans up
-# the code for commands and summaries.
-#
-# Features include:
-#   - A summary provider that dynamically chooses a traversal strategy.
-#   - A suite of 'pptree' commands for console visualization.
-#   - An 'export_tree' command to generate Graphviz .dot files.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Tree-formatting entry points for Pretty LLDB.
+
+This module gathers the LLDB-facing features for supported tree containers:
+summary generation, synthetic children, console traversal commands, and
+Graphviz export. Traversal semantics are delegated to the shared strategy and
+extraction layers so the user-facing commands stay consistent.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 from .command_helpers import (
     empty_structure_message,
@@ -49,6 +45,14 @@ from .visualization_options import create_tree_traversal_strategy
 
 
 def _collect_tree_nodes_by_address(root_ptr, wanted_addresses=None):
+    """
+    Traverse a tree and map node addresses to concrete LLDB node values.
+
+    When `wanted_addresses` is provided, the traversal stops as soon as all
+    requested addresses have been resolved. This keeps the synthetic provider
+    from materializing more nodes than the selected traversal order requires.
+    """
+
     nodes_by_address = {}
     visited_addrs = set()
     wanted = set(wanted_addresses) if wanted_addresses else None
@@ -80,12 +84,16 @@ def _collect_tree_nodes_by_address(root_ptr, wanted_addresses=None):
 
 @register_synthetic(r"^(Custom|My)?(Binary)?Tree<.*>$")
 class TreeProvider:
+    """Expose tree nodes as ordered synthetic children in the variable view."""
+
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
         self.children = []
         self._loaded = False
 
     def update(self):
+        """Rebuild the synthetic children using the configured traversal order."""
+
         self.children = []
         self._loaded = True
 
@@ -93,9 +101,7 @@ class TreeProvider:
         if not root_ptr or get_raw_pointer(root_ptr) == 0:
             return
 
-        strategy, _ = create_tree_traversal_strategy(
-            default_mode=g_config.tree_traversal_strategy
-        )
+        strategy, _ = create_tree_traversal_strategy(default_mode=g_config.tree_traversal_strategy)
         ordered_addresses = strategy.ordered_addresses(root_ptr, g_config.synthetic_max_children)
         nodes_by_address = _collect_tree_nodes_by_address(
             root_ptr,
@@ -109,32 +115,39 @@ class TreeProvider:
                 self.children.append(child)
 
     def _ensure_updated(self):
+        """Populate synthetic children lazily on the first LLDB access."""
+
         if not self._loaded:
             self.update()
 
     def num_children(self):
+        """Return the number of synthetic tree nodes available for expansion."""
+
         self._ensure_updated()
         return len(self.children)
 
     def get_child_at_index(self, index):
+        """Return the synthetic child at `index`, or `None` if unavailable."""
+
         self._ensure_updated()
         if 0 <= index < len(self.children):
             return self.children[index]
         return None
 
     def get_child_index(self, name):
+        """Translate an LLDB synthetic child label into its numeric index."""
+
         return parse_synthetic_child_index(name)
-
-
-# ------------------- Summary Provider for Tree Root ------------------- #
 
 
 @register_summary(r"^(Custom|My)?(Binary)?Tree<.*>$")
 def tree_summary_provider(valobj, internal_dict):
     """
-    This is the main summary provider for Tree structures. It uses the
-    Strategy pattern to select a traversal method based on the global
-    configuration ('g_config.tree_traversal_strategy').
+    Build the one-line summary for supported tree containers.
+
+    The provider validates the layout, selects the active traversal strategy,
+    formats the visited values, and appends any incomplete-state markers that
+    should remain visible to the user.
     """
     use_colors = should_use_colors()
 
@@ -191,11 +204,14 @@ def tree_summary_provider(valobj, internal_dict):
     return f"{summary}{diagnostics_suffix}"
 
 
-# ------- Helper to recursively "draw" the tree for 'pptree' commands ------- #
-
-
 def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=None, depth=0):
-    """Helper function to recursively "draw" the tree in Pre-Order."""
+    """
+    Render a tree branch as an ASCII diagram using pre-order traversal.
+
+    The helper keeps track of visited addresses to avoid infinite recursion on
+    malformed cyclic structures and enforces the configured maximum depth.
+    """
+
     if visited_addrs is None:
         visited_addrs = set()
 
@@ -240,13 +256,12 @@ def _recursive_preorder_print(node_ptr, prefix, is_last, result, visited_addrs=N
         )
 
 
-# ------------ Central dispatcher for all 'pptree' commands ------------- #
-
-
 def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
     """
-    A single function to handle the logic for all traversal commands.
-    'order' can be 'preorder', 'inorder', or 'postorder'.
+    Dispatch the `pptree_*` commands through a shared validation pipeline.
+
+    `order` selects the traversal mode. Pre-order produces a drawn tree,
+    while the other modes render a linearized visitation sequence.
     """
     _, _, tree_val = resolve_command_variable(
         debugger,
@@ -296,31 +311,31 @@ def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
     result.AppendMessage(f"[{' -> '.join(summary_parts)}]")
 
 
-# ------------------- User-facing command functions -------------------- #
-
-
 def pptree_preorder_command(debugger, command, result, internal_dict):
-    """Implements the 'pptree_preorder' command."""
+    """Render the selected tree as an ASCII diagram in pre-order."""
+
     _pptree_command_dispatcher(debugger, command, result, internal_dict, "preorder")
 
 
 def pptree_inorder_command(debugger, command, result, internal_dict):
-    """Implements the 'pptree_inorder' command."""
+    """Print the selected tree values in in-order traversal order."""
+
     _pptree_command_dispatcher(debugger, command, result, internal_dict, "inorder")
 
 
 def pptree_postorder_command(debugger, command, result, internal_dict):
-    """Implements the 'pptree_postorder' command."""
+    """Print the selected tree values in post-order traversal order."""
+
     _pptree_command_dispatcher(debugger, command, result, internal_dict, "postorder")
-
-
-# ---------- LLDB Command to Export Tree as Graphviz .dot File ---------- #
 
 
 def export_tree_command(debugger, command, result, internal_dict):
     """
-    Implements the 'export_tree' command. Traverses a tree and writes
-    a Graphviz .dot file. Now uses a unified strategy-based approach.
+    Export a supported tree container to a Graphviz `.dot` file.
+
+    When the caller requests a known traversal order, the exported graph is
+    annotated with that visit sequence; otherwise the command falls back to the
+    default pre-order rendering without traversal annotations.
     """
     args, frame = resolve_command_arguments(
         debugger,

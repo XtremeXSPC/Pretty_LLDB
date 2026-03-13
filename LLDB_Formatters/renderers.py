@@ -1,31 +1,58 @@
+# ============================================================================ #
+"""
+Renderer payload and DOT generation helpers for Pretty LLDB.
+
+This module converts extracted list, tree, and graph structures into stable
+payloads consumed by the web visualizers and into deterministic DOT output used
+for export commands and regression tests.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
+
 from typing import Iterable, Optional
 
 
 def _hex_address(address):
+    """Format a numeric address using the hexadecimal style shown in LLDB."""
+
     return f"0x{address:x}"
 
 
 def _escape_dot_label(text):
+    """Escape label text so it remains valid inside Graphviz DOT strings."""
+
     return str(text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 def _sorted_tree_nodes(extracted_tree):
+    """Return tree nodes in deterministic address order for stable rendering."""
+
     return sorted(extracted_tree.nodes, key=lambda node: node.address)
 
 
 def _sorted_tree_edges(extracted_tree):
+    """Return tree edges in deterministic source/target order."""
+
     return sorted(extracted_tree.edges, key=lambda edge: (edge.source, edge.target))
 
 
 def _sorted_graph_nodes(extracted_graph):
+    """Return graph nodes in deterministic address order for tests and exports."""
+
     return sorted(extracted_graph.nodes, key=lambda node: node.address)
 
 
 def _sorted_graph_edges(extracted_graph):
+    """Return graph edges in deterministic source/target order."""
+
     return sorted(extracted_graph.edges, key=lambda edge: (edge.source, edge.target))
 
 
 def build_list_renderer_payload(extracted_list):
+    """Translate an extracted linear structure into web-renderer payload data."""
+
     seen_addresses = set()
     nodes_data = []
     edges_data = []
@@ -81,6 +108,8 @@ def build_list_renderer_payload(extracted_list):
 
 
 def build_tree_renderer_payload(extracted_tree, traversal_order: Optional[Iterable[int]] = None):
+    """Translate an extracted tree into deterministic node and edge payloads."""
+
     order_map = {}
     if traversal_order:
         order_map = {address: index for index, address in enumerate(traversal_order, 1)}
@@ -110,13 +139,17 @@ def build_tree_renderer_payload(extracted_tree, traversal_order: Optional[Iterab
     return {
         "nodes_data": nodes_data,
         "edges_data": edges_data,
-        "root_address": _hex_address(extracted_tree.root_address) if extracted_tree.root_address else None,
+        "root_address": (
+            _hex_address(extracted_tree.root_address) if extracted_tree.root_address else None
+        ),
         "tree_size": extracted_tree.size if extracted_tree.size is not None else "N/A",
         "child_mode": extracted_tree.child_mode,
     }
 
 
 def build_graph_renderer_payload(extracted_graph, directed=True):
+    """Translate an extracted graph into payload data for web and DOT renderers."""
+
     nodes_data = []
     for node in _sorted_graph_nodes(extracted_graph):
         node_id = _hex_address(node.address)
@@ -157,6 +190,8 @@ def build_graph_renderer_payload(extracted_graph, directed=True):
 
 
 def render_tree_dot(extracted_tree, traversal_order: Optional[Iterable[int]] = None):
+    """Render an extracted tree as Graphviz DOT with deterministic ordering."""
+
     payload = build_tree_renderer_payload(extracted_tree, traversal_order=traversal_order)
 
     dot_lines = [
@@ -178,6 +213,8 @@ def render_tree_dot(extracted_tree, traversal_order: Optional[Iterable[int]] = N
 
 
 def render_graph_dot(extracted_graph, directed=True):
+    """Render an extracted graph as Graphviz DOT in directed or undirected mode."""
+
     payload = build_graph_renderer_payload(extracted_graph, directed=directed)
     graph_keyword = "digraph" if directed else "graph"
     edge_operator = "->" if directed else "--"

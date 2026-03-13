@@ -1,20 +1,15 @@
-# ----------------------------------------------------------------------- #
-# FILE: __init__.py
-#
-# DESCRIPTION:
-# This file is the main entry point for the 'LLDB_Formatters' package.
-# It is automatically executed by LLDB when the package is imported.
-#
-# It has been refactored to be fully dynamic. It no longer contains
-# hardcoded lists of formatters. Instead, it iterates over the
-# 'FORMATTER_REGISTRY' (populated by decorators in other modules)
-# and registers all discovered formatters and their associated commands.
-#
-# Its primary responsibilities are:
-#   - Creating and enabling the 'CustomFormatters' category.
-#   - Dynamically registering all data formatters from the registry.
-#   - Registering all custom LLDB commands.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+LLDB package entry point for Pretty LLDB.
+
+This module is imported by LLDB to register formatter categories, summary and
+synthetic providers, and the custom commands exposed by the package. It also
+provides the built-in help command shown to end users inside the debugger.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 try:
     import lldb  # type: ignore
@@ -30,8 +25,11 @@ from .helpers import Colors
 # ---------------------------- Help Command ----------------------------- #
 def formatter_help_command(debugger, command, result, internal_dict):
     """
-    Implements the 'formatter_help' command.
-    Prints a formatted list of all available custom commands.
+    Print the formatter command reference shown to LLDB users.
+
+    The help text documents the supported commands, aliases, and the most
+    important arguments so users can discover the package features directly
+    from the debugger console.
     """
     C_CMD = Colors.BOLD_CYAN
     C_ARG = Colors.YELLOW
@@ -80,8 +78,11 @@ def formatter_help_command(debugger, command, result, internal_dict):
 # --------------------- LLDB Module Initialization ---------------------- #
 def __lldb_init_module(debugger, internal_dict):
     """
-    This is the main entry point that LLDB calls. It handles the dynamic
-    registration of all formatters and commands.
+    Initialize the Pretty LLDB package inside the active LLDB session.
+
+    The function creates the formatter category when needed, registers every
+    provider collected in the shared registry, installs the custom commands and
+    aliases, and prints a short confirmation banner for the user.
     """
     if lldb is None:
         print("LLDB module not available - Skipping formatter registration")

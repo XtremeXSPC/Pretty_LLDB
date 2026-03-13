@@ -1,3 +1,16 @@
+# ============================================================================ #
+"""
+Diagnostic reporting helpers for Pretty LLDB.
+
+This module turns extraction diagnostics into user-facing reports and exposes
+the `formatter_explain` command used to inspect how the formatter recognized a
+value during a real LLDB session.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
+
 from .command_helpers import resolve_command_variable
 from .extraction import (
     ExtractedGraphStructure,
@@ -9,6 +22,8 @@ from .extraction import (
 
 
 def _append_resolution_lines(lines, extraction):
+    """Append the resolved field-role mappings recorded during extraction."""
+
     lines.append("Resolved fields:")
     for resolution in extraction.diagnostics.field_resolutions:
         matched = resolution.matched if resolution.matched else "<unresolved>"
@@ -16,6 +31,8 @@ def _append_resolution_lines(lines, extraction):
 
 
 def _append_warning_lines(lines, extraction):
+    """Append extraction warnings, or an explicit `none` marker when absent."""
+
     if not extraction.diagnostics.warnings:
         lines.append("Warnings:")
         lines.append("  - none")
@@ -27,6 +44,8 @@ def _append_warning_lines(lines, extraction):
 
 
 def format_extraction_report(var_name: str, valobj, structure_kind: str, extraction) -> str:
+    """Build a human-readable explanation report for one extracted structure."""
+
     lines = [
         f"Formatter explanation for '{var_name}'",
         f"Type: {valobj.GetTypeName()}",
@@ -75,6 +94,8 @@ def format_extraction_report(var_name: str, valobj, structure_kind: str, extract
 
 
 def formatter_explain_command(debugger, command, result, internal_dict):
+    """Implement the `formatter_explain` LLDB command for supported structures."""
+
     _, var_name, valobj = resolve_command_variable(
         debugger,
         command,

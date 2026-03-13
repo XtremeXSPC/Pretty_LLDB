@@ -1,3 +1,17 @@
+# ============================================================================ #
+"""
+Pointer-resolution helpers for Pretty LLDB.
+
+This module isolates the logic required to interpret raw pointers and common
+pointer-like wrapper layouts exposed by LLDB, including smart-pointer internals
+and defensive fallbacks used when the formatter must recover an object address
+from non-pointer storage.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
+
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -28,6 +42,8 @@ MAX_POINTER_RESOLUTION_DEPTH = 6
 
 @dataclass
 class PointerResolution:
+    """Describe the result of resolving a raw or wrapped pointer-like value."""
+
     address: int = 0
     pointee: Optional[object] = None
     kind: str = "invalid"
@@ -35,13 +51,19 @@ class PointerResolution:
 
     @property
     def is_null(self) -> bool:
+        """Return whether the resolved pointer address is explicitly null."""
+
         return self.address == 0
 
 
 def get_nonsynthetic_value(value):
     """
-    Returns the non-synthetic backing value when LLDB exposes a synthetic
-    provider for the object. Falls back to the original value otherwise.
+    Return the non-synthetic backing value behind an LLDB display object.
+
+    When LLDB exposes synthetic children, the formatter often needs to inspect
+    the underlying storage fields instead. This helper performs that fallback
+    transparently and returns the original value when no non-synthetic view is
+    available.
     """
     if not value or not value.IsValid():
         return value
@@ -57,6 +79,8 @@ def get_nonsynthetic_value(value):
 
 
 def _get_named_child(value, name):
+    """Return one named child from the non-synthetic value when it exists."""
+
     base_value = get_nonsynthetic_value(value)
     if not base_value or not base_value.IsValid():
         return None
@@ -72,6 +96,8 @@ def _get_named_child(value, name):
 
 
 def _safe_num_children(value) -> int:
+    """Return the child count of a value, falling back to zero on failure."""
+
     base_value = get_nonsynthetic_value(value)
     if not base_value or not base_value.IsValid():
         return 0
@@ -83,6 +109,8 @@ def _safe_num_children(value) -> int:
 
 
 def _safe_child_at_index(value, index):
+    """Return one child by index, suppressing LLDB lookup failures."""
+
     base_value = get_nonsynthetic_value(value)
     if not base_value or not base_value.IsValid():
         return None
@@ -98,6 +126,8 @@ def _safe_child_at_index(value, index):
 
 
 def _safe_child_name(value) -> Optional[str]:
+    """Return a child name if LLDB can provide it safely."""
+
     if not value or not value.IsValid():
         return None
 
@@ -108,6 +138,8 @@ def _safe_child_name(value) -> Optional[str]:
 
 
 def _safe_object_address(value) -> int:
+    """Return the file address of an LLDB object, or zero if unavailable."""
+
     if not value or not value.IsValid():
         return 0
 
@@ -118,6 +150,8 @@ def _safe_object_address(value) -> int:
 
 
 def _safe_dereference(value):
+    """Dereference a pointer-like value and return the pointee when valid."""
+
     if not value or not value.IsValid():
         return None
 
@@ -132,6 +166,8 @@ def _safe_dereference(value):
 
 
 def _resolve_pointer_impl(value, allow_object_address, depth, seen_ids):
+    """Recursively resolve raw pointers and wrapper fields into one pointee."""
+
     base_value = get_nonsynthetic_value(value)
     if not base_value or not base_value.IsValid():
         return PointerResolution()
@@ -228,6 +264,8 @@ def _resolve_pointer_impl(value, allow_object_address, depth, seen_ids):
 
 
 def resolve_pointer_like(value, allow_object_address=True) -> PointerResolution:
+    """Resolve a pointer-like value into an address, pointee, and match metadata."""
+
     return _resolve_pointer_impl(
         value,
         allow_object_address=allow_object_address,
@@ -237,10 +275,14 @@ def resolve_pointer_like(value, allow_object_address=True) -> PointerResolution:
 
 
 def get_raw_pointer(value) -> int:
+    """Return the raw address resolved from a pointer-like value."""
+
     return resolve_pointer_like(value).address
 
 
 def dereference_pointer_like(value):
+    """Return the resolved pointee object for a pointer-like value."""
+
     resolution = resolve_pointer_like(value)
     if resolution.kind == "invalid" or resolution.is_null:
         return None

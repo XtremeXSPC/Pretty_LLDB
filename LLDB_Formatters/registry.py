@@ -1,16 +1,16 @@
-# ----------------------------------------------------------------------- #
-# FILE: registry.py
-#
-# DESCRIPTION:
-# This module implements the Registry Pattern for the LLDB formatters.
-# It provides a central list, 'FORMATTER_REGISTRY', and a set of
-# decorators ('register_summary', 'register_synthetic') that allow
-# formatters to be registered for specific data types automatically.
-#
-# This approach decouples the formatters from the main '__init__.py'
-# file. To add a new formatter, one only needs to define it in its
-# module and decorate it, without modifying the initialization script.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Formatter registration support for Pretty LLDB.
+
+This module implements the lightweight registry used by the package to collect
+summary and synthetic providers before LLDB initialization runs. Formatters add
+themselves through decorators, which keeps the package entry point free from
+hard-coded formatter lists.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 # This global list stores registration information for all formatters.
 # The '__lldb_init_module' function will iterate over this list to
@@ -20,10 +20,11 @@ FORMATTER_REGISTRY = []
 
 def register_summary(type_regex):
     """
-    A decorator that registers a function as a Summary Provider for a given type.
+    Register a function as the summary provider for matching type names.
 
-    Args:
-        type_regex: A regular expression that matches the C++ type name.
+    The decorator records the fully-qualified Python path expected by LLDB so
+    the package entry point can register the provider later without importing
+    implementation details a second time.
     """
 
     def decorator(summary_function):
@@ -46,10 +47,10 @@ def register_summary(type_regex):
 
 def register_synthetic(type_regex):
     """
-    A decorator that registers a class as a Synthetic Children Provider.
+    Register a class as the synthetic children provider for matching types.
 
-    Args:
-        type_regex: A regular expression that matches the C++ type name.
+    The stored class path is later consumed by `__lldb_init_module`, which uses
+    it to register the provider with the active LLDB formatter category.
     """
 
     def decorator(synthetic_class):

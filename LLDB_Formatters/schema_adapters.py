@@ -1,3 +1,17 @@
+# ============================================================================ #
+"""
+Adapter-driven schema resolution for Pretty LLDB structures.
+
+This module defines the adapter catalog used to map user-defined container and
+node layouts onto the semantic roles expected by the extraction layer. The
+resulting schema objects provide a stable contract for summaries, traversal
+strategies, renderers, and synthetic providers.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
+
 import re
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
@@ -31,6 +45,8 @@ COMMON_SIZE_FIELDS = (
 
 @dataclass(frozen=True)
 class AdapterDefinition:
+    """Describe one adapter candidate and the semantic roles it can satisfy."""
+
     name: str
     roles: Dict[str, Tuple[str, ...]]
     required_roles: Tuple[str, ...] = ()
@@ -39,6 +55,8 @@ class AdapterDefinition:
 
 @dataclass
 class LinearContainerSchema:
+    """Capture the resolved storage fields for a supported linear container."""
+
     adapter_name: Optional[str] = None
     head_field: Optional[str] = None
     size_field: Optional[str] = None
@@ -48,6 +66,8 @@ class LinearContainerSchema:
 
 @dataclass
 class LinearNodeSchema:
+    """Capture the resolved fields for one node in a linear structure."""
+
     adapter_name: Optional[str] = None
     value_field: Optional[str] = None
     next_field: Optional[str] = None
@@ -56,6 +76,8 @@ class LinearNodeSchema:
 
 @dataclass
 class TreeContainerSchema:
+    """Capture the resolved storage fields for a supported tree container."""
+
     adapter_name: Optional[str] = None
     root_field: Optional[str] = None
     size_field: Optional[str] = None
@@ -65,6 +87,8 @@ class TreeContainerSchema:
 
 @dataclass
 class TreeNodeSchema:
+    """Capture the resolved child/value fields for one tree node layout."""
+
     adapter_name: Optional[str] = None
     value_field: Optional[str] = None
     left_field: Optional[str] = None
@@ -73,6 +97,8 @@ class TreeNodeSchema:
 
     @property
     def child_mode(self) -> Optional[str]:
+        """Describe whether the resolved node behaves like a binary or n-ary node."""
+
         if self.children_field:
             return "nary"
         if self.left_field or self.right_field:
@@ -82,6 +108,8 @@ class TreeNodeSchema:
 
 @dataclass
 class GraphContainerSchema:
+    """Capture the resolved storage fields for a supported graph container."""
+
     adapter_name: Optional[str] = None
     nodes_field: Optional[str] = None
     node_count_field: Optional[str] = None
@@ -93,6 +121,8 @@ class GraphContainerSchema:
 
 @dataclass
 class GraphNodeSchema:
+    """Capture the resolved payload and adjacency fields for one graph node."""
+
     adapter_name: Optional[str] = None
     value_field: Optional[str] = None
     neighbors_field: Optional[str] = None
@@ -250,10 +280,20 @@ GRAPH_NODE_ADAPTERS = (
 
 
 def _type_name_matches(type_name: str, patterns: Tuple[str, ...]) -> bool:
+    """Return whether a type name matches at least one adapter pattern."""
+
     return any(re.search(pattern, type_name, flags=re.IGNORECASE) for pattern in patterns)
 
 
 def _resolve_child_or_field(value, candidates: Tuple[str, ...]):
+    """
+    Resolve the first matching child or declared field among `candidates`.
+
+    The helper returns both the matched field name and the concrete child when
+    the value currently exposes one. When only type metadata is available, the
+    second tuple entry remains `None`.
+    """
+
     base_value = get_nonsynthetic_value(value)
     if not base_value or not base_value.IsValid():
         return None, None
@@ -272,6 +312,8 @@ def _resolve_child_or_field(value, candidates: Tuple[str, ...]):
 
 
 def _resolve_type_field(type_obj, candidates: Tuple[str, ...]) -> Optional[str]:
+    """Return the first candidate field that exists on `type_obj`."""
+
     if not type_obj:
         return None
 
@@ -282,6 +324,13 @@ def _resolve_type_field(type_obj, candidates: Tuple[str, ...]) -> Optional[str]:
 
 
 def _select_value_adapter(value, adapters):
+    """
+    Choose the best adapter for a concrete LLDB value instance.
+
+    Adapters are scored by required-role coverage, type-name affinity, and the
+    total number of semantic roles they can satisfy from the current value.
+    """
+
     base_value = get_nonsynthetic_value(value)
     type_name = ""
     if base_value and base_value.IsValid():
@@ -319,6 +368,13 @@ def _select_value_adapter(value, adapters):
 
 
 def _select_type_adapter(value_or_type, adapters):
+    """
+    Choose the best adapter using type metadata only.
+
+    This path is used for node schemas, where the formatter often needs field
+    names before it has a stable concrete child value for every semantic role.
+    """
+
     type_obj = value_or_type.GetType() if hasattr(value_or_type, "GetType") else value_or_type
     type_name = ""
     if hasattr(value_or_type, "GetTypeName"):
@@ -353,6 +409,8 @@ def _select_type_adapter(value_or_type, adapters):
 
 
 def _record_resolutions(diagnostics, adapter, matched_fields, role_names):
+    """Forward adapter field matches to the shared diagnostics collector."""
+
     if diagnostics is None or adapter is None:
         return
 
@@ -365,6 +423,8 @@ def _record_resolutions(diagnostics, adapter, matched_fields, role_names):
 
 
 def resolve_linear_container_schema(value, diagnostics=None) -> LinearContainerSchema:
+    """Resolve the storage schema for a supported linear container value."""
+
     match = _select_value_adapter(value, LINEAR_CONTAINER_ADAPTERS)
     adapter = match["adapter"]
     _record_resolutions(
@@ -383,6 +443,8 @@ def resolve_linear_container_schema(value, diagnostics=None) -> LinearContainerS
 
 
 def resolve_linear_node_schema(value_or_type, diagnostics=None) -> LinearNodeSchema:
+    """Resolve the node schema for a supported linear structure layout."""
+
     match = _select_type_adapter(value_or_type, LINEAR_NODE_ADAPTERS)
     adapter = match["adapter"]
     _record_resolutions(
@@ -400,6 +462,8 @@ def resolve_linear_node_schema(value_or_type, diagnostics=None) -> LinearNodeSch
 
 
 def resolve_tree_container_schema(value, diagnostics=None) -> TreeContainerSchema:
+    """Resolve the storage schema for a supported tree container value."""
+
     match = _select_value_adapter(value, TREE_CONTAINER_ADAPTERS)
     adapter = match["adapter"]
     _record_resolutions(
@@ -418,6 +482,8 @@ def resolve_tree_container_schema(value, diagnostics=None) -> TreeContainerSchem
 
 
 def resolve_tree_node_schema(value_or_type, diagnostics=None) -> TreeNodeSchema:
+    """Resolve the node schema for a supported binary or n-ary tree layout."""
+
     match = _select_type_adapter(value_or_type, TREE_NODE_ADAPTERS)
     adapter = match["adapter"]
     _record_resolutions(
@@ -441,6 +507,8 @@ def resolve_tree_node_schema(value_or_type, diagnostics=None) -> TreeNodeSchema:
 
 
 def resolve_graph_container_schema(value, diagnostics=None) -> GraphContainerSchema:
+    """Resolve the storage schema for a supported graph container value."""
+
     match = _select_value_adapter(value, GRAPH_CONTAINER_ADAPTERS)
     adapter = match["adapter"]
     _record_resolutions(
@@ -465,6 +533,8 @@ def resolve_graph_container_schema(value, diagnostics=None) -> GraphContainerSch
 
 
 def resolve_graph_node_schema(value_or_type, diagnostics=None) -> GraphNodeSchema:
+    """Resolve the node schema for a supported graph node layout."""
+
     match = _select_type_adapter(value_or_type, GRAPH_NODE_ADAPTERS)
     adapter = match["adapter"]
     _record_resolutions(
@@ -481,12 +551,21 @@ def resolve_graph_node_schema(value_or_type, diagnostics=None) -> GraphNodeSchem
 
 
 def get_resolved_child(value, field_name):
+    """Return the concrete child for one previously resolved field name."""
+
     if not field_name:
         return None
     return get_child_member_by_names(value, [field_name])
 
 
 def get_tree_children(node_struct, schema: Optional[TreeNodeSchema] = None):
+    """
+    Return the non-null children for a tree node using the resolved schema.
+
+    The helper supports both n-ary container fields and classic binary
+    left/right layouts, always filtering out null pointer entries.
+    """
+
     if schema is None:
         schema = resolve_tree_node_schema(node_struct)
 

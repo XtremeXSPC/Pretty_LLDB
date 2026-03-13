@@ -1,17 +1,15 @@
-# ----------------------------------------------------------------------- #
-# FILE: graph.py
-#
-# DESCRIPTION:
-# This module provides data formatters and commands for visualizing
-# graph data structures.
-#
-# It contains:
-#   - 'GraphProvider': A synthetic children provider, registered with a
-#     decorator, that displays a graph's nodes as children.
-#   - 'GraphNodeSummary': A summary provider for individual graph nodes.
-#   - 'export_graph_command': A custom LLDB command to export a graph
-#     to a Graphviz .dot file.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Graph-formatting entry points for Pretty LLDB.
+
+This module hosts the LLDB-facing graph providers used by the project:
+synthetic children for graph containers, summaries for graph nodes, and the
+command that exports extracted graphs to Graphviz format.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 from .command_helpers import (
     empty_structure_message,
@@ -37,16 +35,10 @@ from .summary_contract import append_incomplete_marker, unsupported_layout_summa
 from .synthetic_support import parse_synthetic_child_index
 from .visualization_options import parse_graph_export_arguments
 
-# -------------- Formatter for Graphs (Synthetic Children) -------------- #
-
 
 @register_synthetic(r"^(Custom|My)?Graph<.*>$")
 class GraphProvider:
-    """
-    Provides synthetic children for a Graph structure, allowing the user
-    to expand the graph object in the debugger's variable view to see
-    its nodes.
-    """
+    """Expose the graph node container as synthetic LLDB children."""
 
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
@@ -55,35 +47,45 @@ class GraphProvider:
         # update() is called on-demand to ensure it has the latest state.
 
     def update(self):
-        """Finds the container of nodes within the graph object."""
+        """Resolve and cache the graph field that stores the node collection."""
+
         self.nodes_container = resolve_graph_container_schema(self.valobj).nodes_container
         self._loaded = True
 
     def _ensure_updated(self):
+        """Populate the cached node container before synthetic access."""
+
         if not self._loaded:
             self.update()
 
     def num_children(self):
-        """Returns the number of nodes to display as children."""
+        """Return how many graph nodes LLDB should expose as children."""
+
         self._ensure_updated()
         if self.nodes_container and self.nodes_container.IsValid():
             return min(self.nodes_container.GetNumChildren(), g_config.synthetic_max_children)
         return 0
 
     def get_child_at_index(self, index):
-        """Returns the i-th node from the nodes container."""
+        """Return the node child at `index`, or `None` when it is unavailable."""
+
         self._ensure_updated()
         if self.nodes_container and 0 <= index < self.num_children():
             return self.nodes_container.GetChildAtIndex(index)
         return None
 
     def get_child_index(self, name):
+        """Translate an LLDB synthetic child label into its numeric index."""
+
         return parse_synthetic_child_index(name)
 
     def get_summary(self):
         """
-        Returns a concise one-line text summary for the entire graph object.
-        This summary is typically displayed next to the variable name.
+        Build the container-level summary shown next to the graph variable.
+
+        The summary reports the extracted vertex and edge counts when they can
+        be determined and preserves incomplete-layout diagnostics consistently
+        with the rest of the formatter family.
         """
         extraction = extract_graph_structure(self.valobj)
         diagnostics_suffix = (
@@ -104,14 +106,14 @@ class GraphProvider:
         return summary
 
 
-# ------------------ Summary Formatter for Graph Nodes ------------------ #
-
-
 @register_summary(r"^(Custom|My)?(Graph)?Node<.*>$")
 def graph_node_summary_provider(valobj, internal_dict):
     """
-    Provides a summary for a single Graph Node, showing its value and
-    a list of its immediate neighbors.
+    Summarize one graph node and preview its immediate neighbors.
+
+    The provider resolves the node payload and neighbor container through the
+    schema layer, then emits a bounded adjacency preview suitable for the LLDB
+    variables pane.
     """
     schema = resolve_graph_node_schema(valobj)
     if not schema.value_field or not schema.neighbors_field:
@@ -149,14 +151,12 @@ def graph_node_summary_provider(valobj, internal_dict):
     return summary
 
 
-# ----------------- Custom LLDB command 'export_graph' ------------------ #
-
-
 def export_graph_command(debugger, command, result, internal_dict):
     """
-    Implements the 'export_graph' command. It traverses a graph structure
-    and writes a Graphviz .dot file to disk.
-    Usage: (lldb) export_graph <variable_name> [output_file.dot]
+    Export a supported graph container to a Graphviz `.dot` file.
+
+    The command validates the structure, resolves the requested directed or
+    undirected rendering mode, and writes the renderer output to disk.
     """
     args, frame = resolve_command_arguments(
         debugger,

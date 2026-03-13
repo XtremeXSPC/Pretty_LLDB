@@ -1,17 +1,16 @@
-# ----------------------------------------------------------------------- #
-# FILE: linear.py
-#
-# DESCRIPTION:
-# This module provides the summary formatter for linear, pointer-based
-# data structures such as singly-linked lists, stacks, and queues.
-#
-# It follows the new architecture by:
-#   1. Using a 'register_summary' decorator to announce its capability.
-#   2. Delegating structure discovery and traversal to the shared
-#      extraction layer.
-#   3. Formatting the extracted nodes into a final, user-facing
-#      summary string.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Linear-formatting entry points for Pretty LLDB.
+
+This module exposes summary and synthetic providers for pointer-based linear
+containers such as linked lists, stacks, queues, and `std::vector`. The actual
+structure discovery is delegated to the shared extraction and schema layers,
+while this module focuses on LLDB-facing presentation.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 from .abi_layouts import resolve_vector_storage_layout
 from .extraction import extract_linear_structure
@@ -39,12 +38,16 @@ from .synthetic_support import create_synthetic_child, parse_synthetic_child_ind
 @register_synthetic(r"^(Custom|My)?Stack<.*>$")
 @register_synthetic(r"^(Custom|My)?Queue<.*>$")
 class LinearProvider:
+    """Expose traversed linear nodes as synthetic LLDB children."""
+
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
         self.children = []
         self._loaded = False
 
     def update(self):
+        """Rebuild the synthetic child list from the current container state."""
+
         self.children = []
         self._loaded = True
 
@@ -84,20 +87,28 @@ class LinearProvider:
             current_ptr = next_child
 
     def _ensure_updated(self):
+        """Populate the cached synthetic children on first access."""
+
         if not self._loaded:
             self.update()
 
     def num_children(self):
+        """Return how many synthetic children are currently available."""
+
         self._ensure_updated()
         return len(self.children)
 
     def get_child_at_index(self, index):
+        """Return the synthetic child at `index`, or `None` if it is out of range."""
+
         self._ensure_updated()
         if 0 <= index < len(self.children):
             return self.children[index]
         return None
 
     def get_child_index(self, name):
+        """Parse the LLDB child label back into the corresponding numeric index."""
+
         return parse_synthetic_child_index(name)
 
 
@@ -106,16 +117,11 @@ class LinearProvider:
 @register_summary(r"^(Custom|My)?Queue<.*>$")
 def linear_container_summary_provider(valobj, internal_dict):
     """
-    This is the registered summary provider for all linear containers.
-    It orchestrates fetching data using a strategy and formatting the
-    final summary string.
+    Build the one-line summary for supported linked linear containers.
 
-    Args:
-        valobj: The SBValue object representing the list/stack/queue.
-        internal_dict: The LLDB internal dictionary.
-
-    Returns:
-        A formatted one-line summary string.
+    The provider relies on the extraction layer to normalize traversal,
+    cycle detection, truncation handling, and diagnostics before it formats
+    the final LLDB summary string.
     """
     use_colors = should_use_colors()
     extraction = extract_linear_structure(valobj, max_items=g_config.summary_max_items)
@@ -179,8 +185,10 @@ def linear_container_summary_provider(valobj, internal_dict):
 @register_summary(r"^std::vector<.*>$")
 def vector_summary_provider(valobj, internal_dict):
     """
-    Summary provider for std::vector across common libc++ and libstdc++ layouts.
-    Displays size, capacity, data pointer, and a preview of elements.
+    Build a compact summary for `std::vector`-like containers.
+
+    The provider resolves the active ABI layout, computes size and capacity from
+    raw storage pointers, and renders a bounded preview of element values.
     """
     use_colors = should_use_colors()
     C_GREEN = Colors.GREEN if use_colors else ""

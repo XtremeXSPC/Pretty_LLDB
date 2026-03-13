@@ -1,16 +1,16 @@
-# ----------------------------------------------------------------------- #
-# FILE: strategies.py
-#
-# DESCRIPTION:
-# This module implements the Strategy Pattern for traversing data
-# structures. It defines a common interface, 'TraversalStrategy', and
-# provides concrete implementations for various traversal algorithms.
-#
-# By encapsulating the traversal logic in separate strategy classes, we
-# decouple it from the summary providers. This allows for greater
-# flexibility, such as changing the traversal order of a tree at
-# runtime or easily adding new traversal methods.
-# ----------------------------------------------------------------------- #
+# ============================================================================ #
+"""
+Traversal strategies for Pretty LLDB structure summaries and exports.
+
+This module implements the strategy layer used to walk supported structures in
+different orders. It keeps traversal semantics separate from formatter entry
+points so summaries, synthetic providers, and exporters can share the same
+ordered views of the extracted data.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
@@ -41,8 +41,7 @@ from .schema_adapters import (
 # -------------------- Traversal Strategy Base Class -------------------- #
 class TraversalStrategy(ABC):
     """
-    Abstract base class for all traversal strategies. It defines a common
-    interface for different traversal algorithms.
+    Define the common interface shared by all traversal strategy implementations.
     """
 
     @abstractmethod
@@ -50,14 +49,16 @@ class TraversalStrategy(ABC):
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
         """
-        Traverses a data structure and returns a list of value summaries.
+        Traverse a structure and return ordered value summaries plus metadata.
         """
         pass
 
     def traverse_for_dot(self, root_ptr: "lldb.SBValue") -> Tuple[List[str], Dict[str, Any]]:
         """
-        Traverses a data structure and generates content for a Graphviz .dot file.
-        This base implementation is for non-graph structures and can be overridden.
+        Generate DOT-oriented traversal output for simple non-tree structures.
+
+        Subclasses can override this when they need richer structural fidelity,
+        as the tree strategies do for parent-child rendering.
         """
         # Default implementation for non-tree-like structures
         values, metadata = self.traverse(root_ptr, max_items=1000)
@@ -72,11 +73,13 @@ class TraversalStrategy(ABC):
 
 # -------------------- Concrete Traversal Strategies -------------------- #
 class LinearTraversalStrategy(TraversalStrategy):
-    """A strategy for traversing linear, pointer-linked structures like lists."""
+    """Traverse linear pointer-linked structures such as lists and queues."""
 
     def traverse(
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
+        """Traverse a linear chain while tracking truncation and cycle state."""
+
         if not root_ptr or get_raw_pointer(root_ptr) == 0:
             return [], {}
 
@@ -128,19 +131,18 @@ class LinearTraversalStrategy(TraversalStrategy):
 # ----------------- Tree Traversal Strategy Base Class ------------------ #
 class TreeTraversalStrategy(TraversalStrategy):
     """
-    An intermediate base class for tree traversal strategies.
+    Provide shared tree-specific traversal helpers for concrete tree strategies.
 
-    This class provides an implementation of `traverse_for_dot` that
-    visualizes the actual tree structure instead of a linear list. It can
-    also annotate the nodes with their traversal order.
+    In addition to the base traversal contract, this class knows how to
+    generate DOT-friendly parent-child output and how to expose ordered node
+    addresses for synthetic providers and traversal annotations.
     """
 
     def traverse_for_dot(
         self, root_ptr: "lldb.SBValue", annotate: bool = False
     ) -> Tuple[List[str], Dict[str, Any]]:
         """
-        Traverses a tree and generates content for a Graphviz .dot file,
-        correctly representing the parent-child structure.
+        Generate DOT body lines that preserve the real tree structure.
         """
         dot_lines = []
         visited_addrs = set()
@@ -160,15 +162,15 @@ class TreeTraversalStrategy(TraversalStrategy):
     def ordered_addresses(
         self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
     ) -> List[int]:
+        """Return node addresses in the concrete traversal order of the strategy."""
+
         return self._get_ordered_addresses(root_ptr, max_items=max_items)
 
     def _get_ordered_addresses(
         self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
     ) -> List[int]:
         """
-        An internal traversal implementation that returns a list of node
-        addresses in the specific traversal order of the strategy.
-        This must be implemented by each concrete tree strategy.
+        Return node addresses in the traversal order defined by the subclass.
         """
         raise NotImplementedError
 
@@ -179,7 +181,8 @@ class TreeTraversalStrategy(TraversalStrategy):
         visited_addrs: set,
         traversal_map: Dict[int, int],
     ):
-        """Recursive helper to generate Graphviz .dot content for a tree."""
+        """Append DOT nodes and edges for one tree subtree."""
+
         node_addr = get_raw_pointer(node_ptr)
         if node_addr == 0 or node_addr in visited_addrs:
             return
@@ -212,11 +215,13 @@ class TreeTraversalStrategy(TraversalStrategy):
 
 # ----------------- Concrete Tree Traversal Strategies ------------------ #
 class PreOrderTreeStrategy(TreeTraversalStrategy):
-    """A strategy for traversing trees in Pre-Order (Root, Left, Right)."""
+    """Traverse trees in pre-order, visiting the root before its children."""
 
     def traverse(
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
+        """Traverse a tree in pre-order with cycle and depth safeguards."""
+
         values: List[str] = []
         visited_addrs = set()
         max_depth = g_config.tree_max_depth
@@ -261,7 +266,8 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
     def _get_ordered_addresses(
         self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
     ) -> List[int]:
-        """Returns a list of node addresses in pre-order."""
+        """Return visited node addresses in pre-order."""
+
         addresses: List[int] = []
         visited_addrs = set()
         max_depth = g_config.tree_max_depth
@@ -295,14 +301,18 @@ class PreOrderTreeStrategy(TreeTraversalStrategy):
 
 class InOrderTreeStrategy(TreeTraversalStrategy):
     """
-    A strategy for traversing trees In-Order.
-    - Binary Tree: (Left, Root, Right)
-    - N-ary Tree: (First Child, Root, Other Children)
+    Traverse trees in in-order.
+
+    Binary trees use the classic `(left, root, right)` rule, while n-ary trees
+    use the formatter's generalized `(first child, root, remaining children)`
+    convention.
     """
 
     def traverse(
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
+        """Traverse a tree in in-order with cycle and depth safeguards."""
+
         values: List[str] = []
         visited_addrs = set()
         max_depth = g_config.tree_max_depth
@@ -381,7 +391,8 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
     def _get_ordered_addresses(
         self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
     ) -> List[int]:
-        """Returns a list of node addresses in in-order."""
+        """Return visited node addresses in in-order."""
+
         addresses: List[int] = []
         visited_addrs = set()
         max_depth = g_config.tree_max_depth
@@ -435,11 +446,13 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
 
 
 class PostOrderTreeStrategy(TreeTraversalStrategy):
-    """A strategy for traversing trees in Post-Order (Left, Right, Root)."""
+    """Traverse trees in post-order, visiting children before the root."""
 
     def traverse(
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
+        """Traverse a tree in post-order with cycle and depth safeguards."""
+
         values: List[str] = []
         visited_addrs = set()
         max_depth = g_config.tree_max_depth
@@ -488,7 +501,8 @@ class PostOrderTreeStrategy(TreeTraversalStrategy):
     def _get_ordered_addresses(
         self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
     ) -> List[int]:
-        """Returns a list of node addresses in post-order."""
+        """Return visited node addresses in post-order."""
+
         addresses: List[int] = []
         visited_addrs = set()
         max_depth = g_config.tree_max_depth

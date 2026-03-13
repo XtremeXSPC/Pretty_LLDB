@@ -1,3 +1,16 @@
+# ============================================================================ #
+"""
+ABI-specific layout helpers for Pretty LLDB.
+
+This module isolates standard-library field layout probing that would otherwise
+leak into formatter logic, starting with the storage layout resolution required
+to summarize `std::vector` across common libc++ and libstdc++ implementations.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -6,6 +19,8 @@ from .helpers import get_child_member_by_names
 
 @dataclass
 class VectorStorageLayout:
+    """Describe the resolved pointer fields for one `std::vector` layout."""
+
     abi_family: str = "unknown"
     begin_ptr: Optional[object] = None
     end_ptr: Optional[object] = None
@@ -13,6 +28,8 @@ class VectorStorageLayout:
 
 
 def resolve_vector_storage_layout(valobj) -> VectorStorageLayout:
+    """Resolve vector storage pointers for common libc++ and libstdc++ layouts."""
+
     begin_ptr = get_child_member_by_names(valobj, ["__begin_", "__begin"])
     end_ptr = get_child_member_by_names(valobj, ["__end_", "__end"])
     end_cap_ptr = get_child_member_by_names(valobj, ["__end_cap_", "__end_cap"])

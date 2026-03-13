@@ -1,3 +1,16 @@
+# ============================================================================ #
+"""
+Option parsing helpers for Pretty LLDB visualization commands.
+
+This module centralizes the small parsing rules used by tree and graph export
+commands so that command handlers can share one consistent interpretation of
+render modes, traversal names, and default behaviors.
+
+Author: XtremeXSPC
+Version: 0.5.0.dev0
+"""
+# ============================================================================ #
+
 from .strategies import InOrderTreeStrategy, PostOrderTreeStrategy, PreOrderTreeStrategy
 
 GRAPH_RENDER_MODES = {
@@ -13,6 +26,8 @@ TREE_TRAVERSAL_MODES = {
 
 
 def parse_graph_render_mode(mode_token):
+    """Parse the graph render mode token and return the corresponding boolean flag."""
+
     if mode_token is None:
         return True
 
@@ -24,6 +39,8 @@ def parse_graph_render_mode(mode_token):
 
 
 def parse_graph_export_arguments(args):
+    """Parse `export_graph` arguments into an output filename and render mode."""
+
     output_filename = "graph.dot"
     mode_token = None
 
@@ -42,6 +59,8 @@ def parse_graph_export_arguments(args):
 
 
 def create_tree_traversal_strategy(mode_token=None, default_mode="preorder"):
+    """Create the requested tree traversal strategy and return it with its name."""
+
     normalized = default_mode
     if mode_token is not None:
         normalized = mode_token.lower()
