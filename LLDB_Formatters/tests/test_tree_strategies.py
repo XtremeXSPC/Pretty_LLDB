@@ -179,6 +179,49 @@ class TestTreeStrategies(unittest.TestCase):
         self.assertTrue(metadata.get("depth_limited"))
         self.assertTrue(metadata.get("truncated"))
 
+    def test_iterative_strategies_handle_very_deep_trees_without_recursion_errors(self):
+        depth = 1100
+        original_depth_limit = g_config.tree_max_depth
+        g_config.tree_max_depth = depth + 4
+        try:
+            root = _make_right_skewed_tree(depth)
+            preorder, pre_meta = PreOrderTreeStrategy().traverse(root, max_items=depth + 10)
+            inorder, in_meta = InOrderTreeStrategy().traverse(root, max_items=depth + 10)
+            postorder, post_meta = PostOrderTreeStrategy().traverse(root, max_items=depth + 10)
+        finally:
+            g_config.tree_max_depth = original_depth_limit
+
+        self.assertEqual(len(preorder), depth)
+        self.assertEqual(preorder[:3], ["1", "2", "3"])
+        self.assertEqual(inorder[:3], ["1", "2", "3"])
+        self.assertEqual(postorder[:3], [str(depth), str(depth - 1), str(depth - 2)])
+        self.assertFalse(pre_meta.get("depth_limited"))
+        self.assertFalse(in_meta.get("depth_limited"))
+        self.assertFalse(post_meta.get("depth_limited"))
+
+    def test_traverse_for_dot_escapes_quotes_in_labels(self):
+        root = MockSBValue(
+            'say "hi"',
+            {"left": None, "right": None, "value": MockSBValue('say "hi"')},
+        )
+
+        dot_lines, _ = PreOrderTreeStrategy().traverse_for_dot(root)
+        dot = "\n".join(dot_lines)
+
+        self.assertIn('\\"hi\\"', dot)
+
+    def test_traverse_for_dot_reports_depth_limit(self):
+        original_depth_limit = g_config.tree_max_depth
+        g_config.tree_max_depth = 1
+        try:
+            root = _make_right_skewed_tree(4)
+            _, metadata = PreOrderTreeStrategy().traverse_for_dot(root)
+        finally:
+            g_config.tree_max_depth = original_depth_limit
+
+        self.assertTrue(metadata.get("depth_limited"))
+        self.assertTrue(metadata.get("truncated"))
+
 
 # This allows running the test file directly.
 if __name__ == "__main__":

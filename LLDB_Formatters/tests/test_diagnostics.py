@@ -1,8 +1,9 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from LLDB_Formatters.config import g_config
 from LLDB_Formatters.diagnostics import formatter_explain_command
+from LLDB_Formatters.extraction import ExtractedLinearStructure
 from LLDB_Formatters.tests.mock_lldb import MockSBValue
 from LLDB_Formatters.tree import tree_summary_provider
 
@@ -84,6 +85,25 @@ class TestDiagnostics(unittest.TestCase):
             self.assertIn("node_right=right", summary)
         finally:
             g_config.diagnostics_enabled = original_diagnostics_enabled
+
+    def test_formatter_explain_reuses_detected_structure_kind(self):
+        value = MockSBValue(
+            children={"head": MockSBValue(0, is_pointer=True), "size": MockSBValue(0)},
+            name="my_list",
+            type_name="MyList<int>",
+        )
+        debugger = _make_debugger_for_value("my_list", value)
+        result = MockResult()
+
+        with patch("LLDB_Formatters.diagnostics.detect_structure_kind", return_value="linear"):
+            with patch(
+                "LLDB_Formatters.diagnostics.extract_supported_structure",
+                return_value=("linear", ExtractedLinearStructure()),
+            ) as extract_mock:
+                formatter_explain_command(debugger, "my_list", result, {})
+
+        self.assertIsNone(result.error)
+        extract_mock.assert_called_once_with(value, structure_kind="linear")
 
 
 if __name__ == "__main__":

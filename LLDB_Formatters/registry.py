@@ -18,6 +18,15 @@ Version: 0.5.0.dev0
 FORMATTER_REGISTRY = []
 
 
+def _register_formatter(entry):
+    """Append one formatter registration unless an identical entry already exists."""
+
+    for existing in FORMATTER_REGISTRY:
+        if existing == entry:
+            return
+    FORMATTER_REGISTRY.append(entry)
+
+
 def register_summary(type_regex):
     """
     Register a function as the summary provider for matching type names.
@@ -32,7 +41,7 @@ def register_summary(type_regex):
         # This is required by LLDB to find the function.
         function_path = f"{summary_function.__module__}.{summary_function.__name__}"
 
-        FORMATTER_REGISTRY.append(
+        _register_formatter(
             {
                 "type": "summary",
                 "regex": type_regex,
@@ -57,7 +66,7 @@ def register_synthetic(type_regex):
         # Get the full Python path to the class (e.g., 'LLDB_Formatters.graph.GraphProvider')
         class_path = f"{synthetic_class.__module__}.{synthetic_class.__name__}"
 
-        FORMATTER_REGISTRY.append(
+        _register_formatter(
             {
                 "type": "synthetic",
                 "regex": type_regex,

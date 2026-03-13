@@ -19,7 +19,7 @@ except ImportError:
 # Import all modules that contain registered formatters or commands.
 # This ensures that the decorators are run and the registry is populated.
 from . import config, diagnostics, graph, linear, registry, tree, web_visualizer
-from .helpers import Colors
+from .helpers import Colors, should_use_colors
 
 
 # ---------------------------- Help Command ----------------------------- #
@@ -31,10 +31,11 @@ def formatter_help_command(debugger, command, result, internal_dict):
     important arguments so users can discover the package features directly
     from the debugger console.
     """
-    C_CMD = Colors.BOLD_CYAN
-    C_ARG = Colors.YELLOW
-    C_RST = Colors.RESET
-    C_TTL = Colors.GREEN
+    use_colors = should_use_colors()
+    C_CMD = Colors.BOLD_CYAN if use_colors else ""
+    C_ARG = Colors.YELLOW if use_colors else ""
+    C_RST = Colors.RESET if use_colors else ""
+    C_TTL = Colors.GREEN if use_colors else ""
 
     help_message = f"""
 {C_TTL}-----------------------------------------{C_RST}

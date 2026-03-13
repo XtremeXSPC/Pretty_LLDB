@@ -14,6 +14,7 @@ Version: 0.5.0.dev0
 from .command_helpers import (
     empty_structure_message,
     find_variable,
+    normalize_output_path,
     resolve_command_arguments,
     unsupported_layout_message,
 )
@@ -137,11 +138,10 @@ def graph_node_summary_provider(valobj, internal_dict):
     summary = f"{Colors.YELLOW}{val_str}{Colors.RESET}"
 
     if neighbors and neighbors.IsValid() and neighbors.MightHaveChildren():
-        neighbor_summaries = []
-        # Use max_neighbors from the global config object.
         max_neighbors = g_config.graph_max_neighbors
-        neighbor_entries = iter_container_values(neighbors)
-        num_neighbors = len(neighbor_entries)
+        neighbor_entries = iter_container_values(neighbors, max_items=max_neighbors + 1)
+        neighbor_summaries = []
+        is_truncated = len(neighbor_entries) > max_neighbors
 
         for neighbor_entry in neighbor_entries[:max_neighbors]:
             neighbor_node = _safe_get_node_from_pointer(neighbor_entry)
@@ -155,7 +155,7 @@ def graph_node_summary_provider(valobj, internal_dict):
 
         if neighbor_summaries:
             summary += f" -> [{', '.join(neighbor_summaries)}]"
-        if num_neighbors > max_neighbors:
+        if is_truncated:
             summary += f" {SUMMARY_TRUNCATION_MARKER}"
 
     return summary
@@ -186,6 +186,12 @@ def export_graph_command(debugger, command, result, internal_dict):
         result.SetError(str(error))
         return
 
+    try:
+        output_path = normalize_output_path(output_filename)
+    except ValueError as error:
+        result.SetError(str(error))
+        return
+
     graph_val = find_variable(frame, var_name, result)
     if not graph_val:
         return
@@ -202,9 +208,9 @@ def export_graph_command(debugger, command, result, internal_dict):
     mode_label = "directed" if directed else "undirected"
 
     try:
-        with open(output_filename, "w") as f:
+        with open(output_path, "w") as f:
             f.write(dot_content)
-        result.AppendMessage(f"Successfully exported {mode_label} graph to '{output_filename}'.")
-        result.AppendMessage(f"Run: dot -Tpng {output_filename} -o graph.png")
+        result.AppendMessage(f"Successfully exported {mode_label} graph to '{output_path}'.")
+        result.AppendMessage(f"Run: dot -Tpng {output_path} -o graph.png")
     except IOError as e:
-        result.SetError(f"Failed to write to file '{output_filename}': {e}")
+        result.SetError(f"Failed to write to file '{output_path}': {e}")

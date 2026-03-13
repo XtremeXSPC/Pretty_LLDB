@@ -46,6 +46,6 @@ def parse_synthetic_child_index(name):
     if token.startswith("[") and token.endswith("]"):
         token = token[1:-1]
 
-    if not token.isdigit():
+    if not token or any(char < "0" or char > "9" for char in token):
         return -1
     return int(token)

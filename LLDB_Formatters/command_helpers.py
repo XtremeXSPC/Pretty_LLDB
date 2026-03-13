@@ -11,6 +11,7 @@ Version: 0.5.0.dev0
 """
 # ============================================================================ #
 
+import os
 import shlex
 
 INVALID_EXECUTION_CONTEXT_ERROR = "Cannot execute command: no selected frame."
@@ -53,6 +54,20 @@ def unsupported_layout_message(structure_name):
     """Return the shared message used for unsupported structure layouts."""
 
     return f"{structure_name.capitalize()} layout is unsupported."
+
+
+def normalize_output_path(output_filename):
+    """
+    Normalize one user-supplied export path to an absolute filesystem path.
+
+    The helper keeps the export commands flexible for interactive LLDB use
+    while making the final write target explicit in command output and tests.
+    """
+
+    normalized = os.path.abspath(os.path.expanduser(output_filename))
+    if os.path.isdir(normalized):
+        raise ValueError(f"Output path '{normalized}' is a directory.")
+    return normalized
 
 
 def _is_valid_handle(handle):

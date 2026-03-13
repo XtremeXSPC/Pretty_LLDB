@@ -30,6 +30,7 @@ from .helpers import (
     get_raw_pointer,
     get_value_summary,
 )
+from .renderers import _escape_dot_label
 from .schema_adapters import (
     get_resolved_child,
     get_tree_children,
@@ -61,10 +62,10 @@ class TraversalStrategy(ABC):
         as the tree strategies do for parent-child rendering.
         """
         # Default implementation for non-tree-like structures
-        values, metadata = self.traverse(root_ptr, max_items=1000)
+        values, metadata = self.traverse(root_ptr, max_items=g_config.summary_max_items)
         dot_lines = ["digraph G {", '  rankdir="LR";', "  node [shape=box];"]
         for i, value in enumerate(values):
-            dot_lines.append(f'  Node_{i} [label="{value}"];')
+            dot_lines.append(f'  Node_{i} [label="{_escape_dot_label(value)}"];')
             if i > 0:
                 dot_lines.append(f"  Node_{i-1} -> Node_{i};")
         dot_lines.append("}")
@@ -129,6 +130,141 @@ class LinearTraversalStrategy(TraversalStrategy):
 
 
 # ----------------- Tree Traversal Strategy Base Class ------------------ #
+def _result_limit_reached(results: List[object], max_items: Optional[int]) -> bool:
+    """Return whether a traversal output list has reached its configured limit."""
+
+    return max_items is not None and len(results) >= max_items
+
+
+def _resolve_tree_visit_payload(node_ptr: "lldb.SBValue"):
+    """Resolve the normalized visit payload needed by iterative tree traversals."""
+
+    node = _safe_get_node_from_pointer(node_ptr)
+    if not node or not node.IsValid():
+        return None
+
+    schema = resolve_tree_node_schema(node)
+    value = get_resolved_child(node, schema.value_field)
+    value_summary = get_value_summary(value)
+
+    if schema.child_mode == "binary":
+        left_child = get_resolved_child(node, schema.left_field)
+        right_child = get_resolved_child(node, schema.right_field)
+        ordered_children = []
+        for child in (left_child, right_child):
+            if child and get_raw_pointer(child) != 0:
+                ordered_children.append(child)
+        return {
+            "node": node,
+            "schema": schema,
+            "value_summary": value_summary,
+            "is_binary": True,
+            "left_child": left_child,
+            "right_child": right_child,
+            "children": ordered_children,
+        }
+
+    return {
+        "node": node,
+        "schema": schema,
+        "value_summary": value_summary,
+        "is_binary": False,
+        "left_child": None,
+        "right_child": None,
+        "children": get_tree_children(node, schema),
+    }
+
+
+def _schedule_tree_frames(order: str, payload: Dict[str, Any], node_ptr, depth: int):
+    """Return the stack frames that execute one node in the requested order."""
+
+    visit_frame = ("visit", None, depth, get_raw_pointer(node_ptr), payload["value_summary"])
+
+    if order == "preorder":
+        frames = [("enter", child, depth + 1, 0, None) for child in reversed(payload["children"])]
+        frames.append(visit_frame)
+        return frames
+
+    if order == "postorder":
+        frames = [visit_frame]
+        frames.extend(
+            ("enter", child, depth + 1, 0, None) for child in reversed(payload["children"])
+        )
+        return frames
+
+    if payload["is_binary"]:
+        frames = []
+        right_child = payload["right_child"]
+        left_child = payload["left_child"]
+        if right_child and get_raw_pointer(right_child) != 0:
+            frames.append(("enter", right_child, depth + 1, 0, None))
+        frames.append(visit_frame)
+        if left_child and get_raw_pointer(left_child) != 0:
+            frames.append(("enter", left_child, depth + 1, 0, None))
+        return frames
+
+    frames = [
+        ("enter", child, depth + 1, 0, None) for child in reversed(payload["children"][1:])
+    ]
+    frames.append(visit_frame)
+    if payload["children"]:
+        frames.append(("enter", payload["children"][0], depth + 1, 0, None))
+    return frames
+
+
+def _run_tree_traversal(
+    root_ptr: "lldb.SBValue",
+    order: str,
+    max_items: Optional[int],
+    include_cycle_markers: bool,
+    collect_addresses: bool = False,
+):
+    """Run one iterative tree traversal and return ordered output plus metadata."""
+
+    results: List[object] = []
+    visited_addrs = set()
+    depth_limited = False
+    limit_reached = False
+    stack = [("enter", root_ptr, 0, 0, None)]
+    max_depth = g_config.tree_max_depth
+
+    while stack:
+        if _result_limit_reached(results, max_items):
+            limit_reached = True
+            break
+
+        state, node_ptr, depth, node_addr, value_summary = stack.pop()
+        if state == "visit":
+            results.append(node_addr if collect_addresses else value_summary)
+            continue
+
+        if not node_ptr or get_raw_pointer(node_ptr) == 0:
+            continue
+        if depth > max_depth:
+            depth_limited = True
+            continue
+
+        node_addr = get_raw_pointer(node_ptr)
+        if node_addr in visited_addrs:
+            if include_cycle_markers and not _result_limit_reached(results, max_items):
+                results.append(SUMMARY_CYCLE_MARKER)
+            continue
+        visited_addrs.add(node_addr)
+
+        payload = _resolve_tree_visit_payload(node_ptr)
+        if payload is None:
+            continue
+
+        for frame in _schedule_tree_frames(order, payload, node_ptr, depth):
+            stack.append(frame)
+
+    metadata: Dict[str, Any] = {
+        "truncated": limit_reached or depth_limited,
+        "depth_limited": depth_limited,
+    }
+    return results, metadata
+
+
 class TreeTraversalStrategy(TraversalStrategy):
     """
     Provide shared tree-specific traversal helpers for concrete tree strategies.
@@ -138,26 +274,63 @@ class TreeTraversalStrategy(TraversalStrategy):
     addresses for synthetic providers and traversal annotations.
     """
 
+    traversal_order_name = "preorder"
+
     def traverse_for_dot(
         self, root_ptr: "lldb.SBValue", annotate: bool = False
     ) -> Tuple[List[str], Dict[str, Any]]:
         """
         Generate DOT body lines that preserve the real tree structure.
         """
+
         dot_lines = []
         visited_addrs = set()
         traversal_map = {}
+        max_depth = g_config.tree_max_depth
+        depth_limited = False
+        stack = [(root_ptr, 0)]
 
         if annotate:
-            # To annotate, we need to perform the specific traversal (pre, in, post)
-            # and store the order of each node's address.
             ordered_addrs = self._get_ordered_addresses(root_ptr)
-            traversal_map = {addr: i for i, addr in enumerate(ordered_addrs, 1)}
+            traversal_map = {addr: index for index, addr in enumerate(ordered_addrs, 1)}
 
-        self._build_dot_recursive(root_ptr, dot_lines, visited_addrs, traversal_map)
+        while stack:
+            node_ptr, depth = stack.pop()
+            if not node_ptr or get_raw_pointer(node_ptr) == 0:
+                continue
+            if depth > max_depth:
+                depth_limited = True
+                continue
 
-        # The first two lines are added by the caller, so we just return the body.
-        return dot_lines, {}
+            node_addr = get_raw_pointer(node_ptr)
+            if node_addr in visited_addrs:
+                continue
+            visited_addrs.add(node_addr)
+
+            payload = _resolve_tree_visit_payload(node_ptr)
+            if payload is None:
+                continue
+
+            label = payload["value_summary"]
+            if traversal_map and node_addr in traversal_map:
+                label = f"{traversal_map[node_addr]}: {label}"
+            dot_lines.append(f'  Node_{node_addr} [label="{_escape_dot_label(label)}"];')
+
+            next_children = []
+            for child_ptr in payload["children"]:
+                child_addr = get_raw_pointer(child_ptr)
+                if child_addr == 0:
+                    continue
+                if depth + 1 > max_depth:
+                    depth_limited = True
+                    continue
+                dot_lines.append(f"  Node_{node_addr} -> Node_{child_addr};")
+                next_children.append((child_ptr, depth + 1))
+
+            for child_item in reversed(next_children):
+                stack.append(child_item)
+
+        return dot_lines, {"depth_limited": depth_limited, "truncated": depth_limited}
 
     def ordered_addresses(
         self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
@@ -172,131 +345,34 @@ class TreeTraversalStrategy(TraversalStrategy):
         """
         Return node addresses in the traversal order defined by the subclass.
         """
-        raise NotImplementedError
 
-    def _build_dot_recursive(
-        self,
-        node_ptr: "lldb.SBValue",
-        dot_lines: List[str],
-        visited_addrs: set,
-        traversal_map: Dict[int, int],
-    ):
-        """Append DOT nodes and edges for one tree subtree."""
-
-        node_addr = get_raw_pointer(node_ptr)
-        if node_addr == 0 or node_addr in visited_addrs:
-            return
-        visited_addrs.add(node_addr)
-
-        node_struct = _safe_get_node_from_pointer(node_ptr)
-        if not node_struct or not node_struct.IsValid():
-            return
-
-        schema = resolve_tree_node_schema(node_struct)
-        value = get_resolved_child(node_struct, schema.value_field)
-        val_summary = get_value_summary(value).replace('"', '"')
-
-        label = val_summary
-        if traversal_map and node_addr in traversal_map:
-            order_index = traversal_map[node_addr]
-            label = f'"{order_index}: {val_summary}"'
-        else:
-            label = f'"{val_summary}"'
-
-        dot_lines.append(f"  Node_{node_addr} [label={label}];")
-
-        children = get_tree_children(node_struct, schema)
-        for child_ptr in children:
-            child_addr = get_raw_pointer(child_ptr)
-            if child_addr != 0:
-                dot_lines.append(f"  Node_{node_addr} -> Node_{child_addr};")
-                self._build_dot_recursive(child_ptr, dot_lines, visited_addrs, traversal_map)
+        results, _ = _run_tree_traversal(
+            root_ptr,
+            self.traversal_order_name,
+            max_items=max_items,
+            include_cycle_markers=False,
+            collect_addresses=True,
+        )
+        return [address for address in results if isinstance(address, int)]
 
 
 # ----------------- Concrete Tree Traversal Strategies ------------------ #
 class PreOrderTreeStrategy(TreeTraversalStrategy):
     """Traverse trees in pre-order, visiting the root before its children."""
 
+    traversal_order_name = "preorder"
+
     def traverse(
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
         """Traverse a tree in pre-order with cycle and depth safeguards."""
 
-        values: List[str] = []
-        visited_addrs = set()
-        max_depth = g_config.tree_max_depth
-        depth_limited = False
-
-        def _recursive_traverse(node_ptr, depth):
-            nonlocal depth_limited
-            if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
-                return
-            if depth > max_depth:
-                depth_limited = True
-                return
-
-            node_addr = get_raw_pointer(node_ptr)
-            if node_addr in visited_addrs:
-                values.append(SUMMARY_CYCLE_MARKER)
-                return
-            visited_addrs.add(node_addr)
-
-            node = _safe_get_node_from_pointer(node_ptr)
-            if not node or not node.IsValid():
-                return
-
-            # 1. Visit Root
-            schema = resolve_tree_node_schema(node)
-            value = get_resolved_child(node, schema.value_field)
-            values.append(get_value_summary(value))
-
-            # 2. Recurse on children
-            if len(values) < max_items:
-                children = get_tree_children(node, schema)
-                for child in children:
-                    _recursive_traverse(child, depth + 1)
-
-        _recursive_traverse(root_ptr, 0)
-        metadata: Dict[str, Any] = {
-            "truncated": len(values) >= max_items or depth_limited,
-            "depth_limited": depth_limited,
-        }
-        return values, metadata
-
-    def _get_ordered_addresses(
-        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
-    ) -> List[int]:
-        """Return visited node addresses in pre-order."""
-
-        addresses: List[int] = []
-        visited_addrs = set()
-        max_depth = g_config.tree_max_depth
-
-        def _recursive_traverse_addr(node_ptr, depth):
-            if not node_ptr or get_raw_pointer(node_ptr) == 0:
-                return
-            if max_items is not None and len(addresses) >= max_items:
-                return
-            if depth > max_depth:
-                return
-
-            node_addr = get_raw_pointer(node_ptr)
-            if node_addr in visited_addrs:
-                return
-            visited_addrs.add(node_addr)
-
-            # 1. Visit Root (add address)
-            addresses.append(node_addr)
-
-            # 2. Recurse on children
-            node = _safe_get_node_from_pointer(node_ptr)
-            if node and node.IsValid():
-                children = get_tree_children(node, resolve_tree_node_schema(node))
-                for child in children:
-                    _recursive_traverse_addr(child, depth + 1)
-
-        _recursive_traverse_addr(root_ptr, 0)
-        return addresses
+        return _run_tree_traversal(
+            root_ptr,
+            self.traversal_order_name,
+            max_items=max_items,
+            include_cycle_markers=True,
+        )
 
 
 class InOrderTreeStrategy(TreeTraversalStrategy):
@@ -308,229 +384,34 @@ class InOrderTreeStrategy(TreeTraversalStrategy):
     convention.
     """
 
+    traversal_order_name = "inorder"
+
     def traverse(
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
         """Traverse a tree in in-order with cycle and depth safeguards."""
 
-        values: List[str] = []
-        visited_addrs = set()
-        max_depth = g_config.tree_max_depth
-        depth_limited = False
-
-        def _recursive_traverse(node_ptr, depth):
-            nonlocal depth_limited
-            if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
-                return
-            if depth > max_depth:
-                depth_limited = True
-                return
-
-            node_addr = get_raw_pointer(node_ptr)
-            if node_addr in visited_addrs:
-                values.append(SUMMARY_CYCLE_MARKER)
-                return
-            visited_addrs.add(node_addr)
-
-            node = _safe_get_node_from_pointer(node_ptr)
-            if not node or not node.IsValid():
-                return
-
-            schema = resolve_tree_node_schema(node)
-            value = get_resolved_child(node, schema.value_field)
-            left = get_resolved_child(node, schema.left_field)
-            right = get_resolved_child(node, schema.right_field)
-            is_binary = schema.child_mode == "binary"
-
-            if is_binary:
-                # 1. Recurse on Left Subtree
-                if left and get_raw_pointer(left) != 0:
-                    _recursive_traverse(left, depth + 1)
-
-                if len(values) >= max_items:
-                    return
-
-                # 2. Visit Root
-                values.append(get_value_summary(value))
-
-                if len(values) >= max_items:
-                    return
-
-                # 3. Recurse on Right Subtree
-                if right and get_raw_pointer(right) != 0:
-                    _recursive_traverse(right, depth + 1)
-            else:
-                # Fallback to the n-ary tree generalization:
-                # (First Child, Root, Other Children)
-                children = get_tree_children(node, schema)
-
-                # 1. Recurse on first child's subtree
-                if children:
-                    _recursive_traverse(children[0], depth + 1)
-
-                if len(values) >= max_items:
-                    return
-
-                # 2. Visit Root
-                values.append(get_value_summary(value))
-
-                if len(values) >= max_items:
-                    return
-
-                # 3. Recurse on the rest of the children's subtrees
-                for i in range(1, len(children)):
-                    _recursive_traverse(children[i], depth + 1)
-
-        _recursive_traverse(root_ptr, 0)
-        metadata: Dict[str, Any] = {
-            "truncated": len(values) >= max_items or depth_limited,
-            "depth_limited": depth_limited,
-        }
-        return values, metadata
-
-    def _get_ordered_addresses(
-        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
-    ) -> List[int]:
-        """Return visited node addresses in in-order."""
-
-        addresses: List[int] = []
-        visited_addrs = set()
-        max_depth = g_config.tree_max_depth
-
-        def _recursive_traverse_addr(node_ptr, depth):
-            if not node_ptr or get_raw_pointer(node_ptr) == 0:
-                return
-            if max_items is not None and len(addresses) >= max_items:
-                return
-            if depth > max_depth:
-                return
-
-            node_addr = get_raw_pointer(node_ptr)
-            if node_addr in visited_addrs:
-                return
-            visited_addrs.add(node_addr)
-
-            node = _safe_get_node_from_pointer(node_ptr)
-            if not node or not node.IsValid():
-                return
-
-            schema = resolve_tree_node_schema(node)
-            left = get_resolved_child(node, schema.left_field)
-            right = get_resolved_child(node, schema.right_field)
-            is_binary = schema.child_mode == "binary"
-
-            if is_binary:
-                if left and get_raw_pointer(left) != 0:
-                    _recursive_traverse_addr(left, depth + 1)
-                if max_items is not None and len(addresses) >= max_items:
-                    return
-                addresses.append(node_addr)
-                if max_items is not None and len(addresses) >= max_items:
-                    return
-                if right and get_raw_pointer(right) != 0:
-                    _recursive_traverse_addr(right, depth + 1)
-            else:
-                children = get_tree_children(node, schema)
-                if children:
-                    _recursive_traverse_addr(children[0], depth + 1)
-                if max_items is not None and len(addresses) >= max_items:
-                    return
-                addresses.append(node_addr)
-                if max_items is not None and len(addresses) >= max_items:
-                    return
-                for i in range(1, len(children)):
-                    _recursive_traverse_addr(children[i], depth + 1)
-
-        _recursive_traverse_addr(root_ptr, 0)
-        return addresses
+        return _run_tree_traversal(
+            root_ptr,
+            self.traversal_order_name,
+            max_items=max_items,
+            include_cycle_markers=True,
+        )
 
 
 class PostOrderTreeStrategy(TreeTraversalStrategy):
     """Traverse trees in post-order, visiting children before the root."""
+
+    traversal_order_name = "postorder"
 
     def traverse(
         self, root_ptr: "lldb.SBValue", max_items: int
     ) -> Tuple[List[str], Dict[str, Any]]:
         """Traverse a tree in post-order with cycle and depth safeguards."""
 
-        values: List[str] = []
-        visited_addrs = set()
-        max_depth = g_config.tree_max_depth
-        depth_limited = False
-
-        def _recursive_traverse(node_ptr, depth):
-            nonlocal depth_limited
-            if not node_ptr or get_raw_pointer(node_ptr) == 0 or len(values) >= max_items:
-                return
-            if depth > max_depth:
-                depth_limited = True
-                return
-
-            node_addr = get_raw_pointer(node_ptr)
-            if node_addr in visited_addrs:
-                # In post-order, a cycle can fill the list, so we check before appending.
-                if len(values) < max_items:
-                    values.append(SUMMARY_CYCLE_MARKER)
-                return
-            visited_addrs.add(node_addr)
-
-            node = _safe_get_node_from_pointer(node_ptr)
-            if not node or not node.IsValid():
-                return
-
-            # 1. Recurse on all children
-            schema = resolve_tree_node_schema(node)
-            children = get_tree_children(node, schema)
-            for child in children:
-                _recursive_traverse(child, depth + 1)
-
-            if len(values) >= max_items:
-                return
-
-            # 2. Visit Root
-            value = get_resolved_child(node, schema.value_field)
-            values.append(get_value_summary(value))
-
-        _recursive_traverse(root_ptr, 0)
-        metadata: Dict[str, Any] = {
-            "truncated": len(values) >= max_items or depth_limited,
-            "depth_limited": depth_limited,
-        }
-        return values, metadata
-
-    def _get_ordered_addresses(
-        self, root_ptr: "lldb.SBValue", max_items: Optional[int] = None
-    ) -> List[int]:
-        """Return visited node addresses in post-order."""
-
-        addresses: List[int] = []
-        visited_addrs = set()
-        max_depth = g_config.tree_max_depth
-
-        def _recursive_traverse_addr(node_ptr, depth):
-            if not node_ptr or get_raw_pointer(node_ptr) == 0:
-                return
-            if max_items is not None and len(addresses) >= max_items:
-                return
-            if depth > max_depth:
-                return
-
-            node_addr = get_raw_pointer(node_ptr)
-            if node_addr in visited_addrs:
-                return
-            visited_addrs.add(node_addr)
-
-            node = _safe_get_node_from_pointer(node_ptr)
-            if node and node.IsValid():
-                children = get_tree_children(node, resolve_tree_node_schema(node))
-                for child in children:
-                    _recursive_traverse_addr(child, depth + 1)
-                    if max_items is not None and len(addresses) >= max_items:
-                        return
-
-            if max_items is not None and len(addresses) >= max_items:
-                return
-            addresses.append(node_addr)
-
-        _recursive_traverse_addr(root_ptr, 0)
-        return addresses
+        return _run_tree_traversal(
+            root_ptr,
+            self.traversal_order_name,
+            max_items=max_items,
+            include_cycle_markers=True,
+        )

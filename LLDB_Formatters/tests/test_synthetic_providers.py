@@ -4,6 +4,7 @@ from unittest.mock import patch
 from LLDB_Formatters.config import formatter_config_command, g_config
 from LLDB_Formatters.graph import GraphProvider
 from LLDB_Formatters.linear import LinearProvider
+from LLDB_Formatters.synthetic_support import parse_synthetic_child_index
 from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
 from LLDB_Formatters.tree import TreeProvider
 
@@ -270,6 +271,12 @@ class TestSyntheticProviders(unittest.TestCase):
             g_config.synthetic_max_children = original_child_limit
 
         self.assertEqual(values, ["1", "2", "3"])
+
+    def test_parse_synthetic_child_index_accepts_only_ascii_non_negative_indices(self):
+        self.assertEqual(parse_synthetic_child_index("[12]"), 12)
+        self.assertEqual(parse_synthetic_child_index("7"), 7)
+        self.assertEqual(parse_synthetic_child_index("[-1]"), -1)
+        self.assertEqual(parse_synthetic_child_index("[١٢]"), -1)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ Version: 0.5.0.dev0
 from .command_helpers import (
     empty_structure_message,
     find_variable,
+    normalize_output_path,
     resolve_command_arguments,
     resolve_command_variable,
     unsupported_layout_message,
@@ -166,8 +167,7 @@ def tree_summary_provider(valobj, internal_dict):
     if extraction.is_empty:
         return f"Tree is empty{diagnostics_suffix}"
 
-    container_schema = resolve_tree_container_schema(valobj)
-    root_node_ptr = container_schema.root_ptr
+    root_node_ptr = extraction.root_ptr
     if not root_node_ptr or get_raw_pointer(root_node_ptr) == 0:
         return f"Tree is empty{diagnostics_suffix}"
 
@@ -190,10 +190,8 @@ def tree_summary_provider(valobj, internal_dict):
         summary_str += f" {SUMMARY_TRUNCATION_MARKER}"
 
     size_str = ""
-    if extraction and extraction.size is not None:
+    if extraction.size is not None:
         size_str = f"{C_GREEN}size = {extraction.size}{C_RESET}, "
-    elif container_schema.size_member:
-        size_str = f"{C_GREEN}size = {container_schema.size_member.GetValueAsUnsigned()}{C_RESET}, "
 
     summary = f"{size_str}[{summary_str}] ({strategy_name})"
     summary = append_incomplete_marker(
@@ -280,7 +278,7 @@ def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
         result.AppendMessage(empty_structure_message("tree"))
         return
 
-    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
+    root_node_ptr = extraction.root_ptr
 
     result.AppendMessage(
         f"{tree_val.GetTypeName()} at {tree_val.GetAddress()} ({order.capitalize()}):"
@@ -301,14 +299,17 @@ def _pptree_command_dispatcher(debugger, command, result, internal_dict, order):
         return
 
     # Use a large number for max_items to get the full list for printing.
-    values, _ = strategy.traverse(root_node_ptr, max_items=1000)
+    values, metadata = strategy.traverse(root_node_ptr, max_items=g_config.summary_max_items)
 
     if not values:
         result.AppendMessage("[]")
         return
 
     summary_parts = [f"{Colors.YELLOW}{v}{Colors.RESET}" for v in values]
-    result.AppendMessage(f"[{' -> '.join(summary_parts)}]")
+    summary = f"[{' -> '.join(summary_parts)}]"
+    if metadata.get("truncated"):
+        summary += f" {SUMMARY_TRUNCATION_MARKER}"
+    result.AppendMessage(summary)
 
 
 def pptree_preorder_command(debugger, command, result, internal_dict):
@@ -352,6 +353,12 @@ def export_tree_command(debugger, command, result, internal_dict):
     output_filename = args[1] if len(args) > 1 else "tree.dot"
     traversal_order = args[2].lower() if len(args) > 2 else None
 
+    try:
+        output_path = normalize_output_path(output_filename)
+    except ValueError as error:
+        result.SetError(str(error))
+        return
+
     tree_val = find_variable(frame, var_name, result)
     if not tree_val:
         return
@@ -381,18 +388,18 @@ def export_tree_command(debugger, command, result, internal_dict):
         should_annotate = False
 
     traversal_addresses = None
-    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
+    root_node_ptr = extraction.root_ptr
     if should_annotate:
         traversal_addresses = strategy.ordered_addresses(root_node_ptr)
 
     dot_content = render_tree_dot(extraction, traversal_order=traversal_addresses)
 
     try:
-        with open(output_filename, "w") as f:
+        with open(output_path, "w") as f:
             f.write(dot_content)
-        result.AppendMessage(f"Successfully exported tree to '{output_filename}'.")
+        result.AppendMessage(f"Successfully exported tree to '{output_path}'.")
         result.AppendMessage(
-            f"To generate the image, run: dot -Tpng -Gdpi=300 {output_filename} -o tree.png"
+            f"To generate the image, run: dot -Tpng -Gdpi=300 {output_path} -o tree.png"
         )
     except IOError as e:
-        result.SetError(f"Failed to write to file '{output_filename}': {e}")
+        result.SetError(f"Failed to write to file '{output_path}': {e}")

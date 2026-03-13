@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from .abi_layouts import iter_container_values
-from .helpers import get_child_member_by_names, get_raw_pointer, type_has_field
-from .pointers import get_nonsynthetic_value
+from .helpers import get_child_member_by_names, type_has_field
+from .pointers import get_nonsynthetic_value, get_raw_pointer
 
 COMMON_VALUE_FIELDS = (
     "value",
@@ -364,7 +364,11 @@ def _select_value_adapter(value, adapters):
                 "matched_fields": matched_fields,
                 "matched_children": matched_children,
                 "score": score,
+                "required_ok": required_ok,
+                "matched_roles": matched_roles,
             }
+    if not best or not best["required_ok"] or best["matched_roles"] == 0:
+        return None
     return best
 
 
@@ -405,8 +409,23 @@ def _select_type_adapter(value_or_type, adapters):
                 "adapter": adapter,
                 "matched_fields": matched_fields,
                 "score": score,
+                "required_ok": required_ok,
+                "matched_roles": matched_roles,
             }
+    if not best or not best["required_ok"] or best["matched_roles"] == 0:
+        return None
     return best
+
+
+def _empty_adapter_match():
+    """Return the neutral adapter-match payload used when no schema matches."""
+
+    return {
+        "adapter": None,
+        "matched_fields": {},
+        "matched_children": {},
+        "score": (0, 0, 0, 0),
+    }
 
 
 def _record_resolutions(diagnostics, adapter, matched_fields, role_names):
@@ -426,7 +445,7 @@ def _record_resolutions(diagnostics, adapter, matched_fields, role_names):
 def resolve_linear_container_schema(value, diagnostics=None) -> LinearContainerSchema:
     """Resolve the storage schema for a supported linear container value."""
 
-    match = _select_value_adapter(value, LINEAR_CONTAINER_ADAPTERS)
+    match = _select_value_adapter(value, LINEAR_CONTAINER_ADAPTERS) or _empty_adapter_match()
     adapter = match["adapter"]
     _record_resolutions(
         diagnostics,
@@ -446,7 +465,7 @@ def resolve_linear_container_schema(value, diagnostics=None) -> LinearContainerS
 def resolve_linear_node_schema(value_or_type, diagnostics=None) -> LinearNodeSchema:
     """Resolve the node schema for a supported linear structure layout."""
 
-    match = _select_type_adapter(value_or_type, LINEAR_NODE_ADAPTERS)
+    match = _select_type_adapter(value_or_type, LINEAR_NODE_ADAPTERS) or _empty_adapter_match()
     adapter = match["adapter"]
     _record_resolutions(
         diagnostics,
@@ -465,7 +484,7 @@ def resolve_linear_node_schema(value_or_type, diagnostics=None) -> LinearNodeSch
 def resolve_tree_container_schema(value, diagnostics=None) -> TreeContainerSchema:
     """Resolve the storage schema for a supported tree container value."""
 
-    match = _select_value_adapter(value, TREE_CONTAINER_ADAPTERS)
+    match = _select_value_adapter(value, TREE_CONTAINER_ADAPTERS) or _empty_adapter_match()
     adapter = match["adapter"]
     _record_resolutions(
         diagnostics,
@@ -485,7 +504,7 @@ def resolve_tree_container_schema(value, diagnostics=None) -> TreeContainerSchem
 def resolve_tree_node_schema(value_or_type, diagnostics=None) -> TreeNodeSchema:
     """Resolve the node schema for a supported binary or n-ary tree layout."""
 
-    match = _select_type_adapter(value_or_type, TREE_NODE_ADAPTERS)
+    match = _select_type_adapter(value_or_type, TREE_NODE_ADAPTERS) or _empty_adapter_match()
     adapter = match["adapter"]
     _record_resolutions(
         diagnostics,
@@ -510,7 +529,7 @@ def resolve_tree_node_schema(value_or_type, diagnostics=None) -> TreeNodeSchema:
 def resolve_graph_container_schema(value, diagnostics=None) -> GraphContainerSchema:
     """Resolve the storage schema for a supported graph container value."""
 
-    match = _select_value_adapter(value, GRAPH_CONTAINER_ADAPTERS)
+    match = _select_value_adapter(value, GRAPH_CONTAINER_ADAPTERS) or _empty_adapter_match()
     adapter = match["adapter"]
     _record_resolutions(
         diagnostics,
@@ -536,7 +555,7 @@ def resolve_graph_container_schema(value, diagnostics=None) -> GraphContainerSch
 def resolve_graph_node_schema(value_or_type, diagnostics=None) -> GraphNodeSchema:
     """Resolve the node schema for a supported graph node layout."""
 
-    match = _select_type_adapter(value_or_type, GRAPH_NODE_ADAPTERS)
+    match = _select_type_adapter(value_or_type, GRAPH_NODE_ADAPTERS) or _empty_adapter_match()
     adapter = match["adapter"]
     _record_resolutions(
         diagnostics,

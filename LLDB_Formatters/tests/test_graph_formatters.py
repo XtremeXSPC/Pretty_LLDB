@@ -8,6 +8,7 @@
 # ---------------------------------------------------------------------- #
 
 import unittest
+from unittest.mock import patch
 
 from LLDB_Formatters.config import g_config
 from LLDB_Formatters.graph import GraphProvider, graph_node_summary_provider
@@ -113,6 +114,24 @@ class TestGraphFormatters(unittest.TestCase):
         summary = graph_node_summary_provider(self.node_d, {})
         plain_summary = summary.replace("\x1b[33m", "").replace("\x1b[0m", "")
         self.assertEqual(plain_summary, "40")
+
+    def test_graph_node_summary_requests_only_one_extra_neighbor_for_truncation(self):
+        original_max = g_config.graph_max_neighbors
+        g_config.graph_max_neighbors = 1
+        try:
+            neighbors = self.node_a.GetChildMemberWithName("neighbors")
+            with patch(
+                "LLDB_Formatters.graph.iter_container_values",
+                return_value=[self.node_b, self.node_c],
+            ) as iter_mock:
+                plain_summary = graph_node_summary_provider(self.node_a, {}).replace(
+                    "\x1b[33m", ""
+                ).replace("\x1b[0m", "")
+        finally:
+            g_config.graph_max_neighbors = original_max
+
+        iter_mock.assert_called_once_with(neighbors, max_items=2)
+        self.assertEqual(plain_summary, "10 -> [20] ...")
 
 
 if __name__ == "__main__":

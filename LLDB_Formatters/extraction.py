@@ -165,6 +165,7 @@ class ExtractedTreeStructure:
     size_field: Optional[str] = None
     value_field: Optional[str] = None
     child_mode: Optional[str] = None
+    root_ptr: Optional[object] = None
     root_address: int = 0
     is_empty: bool = False
     error_message: Optional[str] = None
@@ -272,6 +273,47 @@ def _safe_num_children(value) -> int:
         return 0
 
 
+def _safe_child_at_index(value, index):
+    """Return one visible child without filtering invalid entries ahead of extraction."""
+
+    base_value = get_nonsynthetic_value(value)
+    if not base_value or not base_value.IsValid():
+        return None
+    try:
+        return base_value.GetChildAtIndex(index)
+    except Exception:
+        return None
+
+
+def _iter_container_entries_for_extraction(value):
+    """
+    Return container entries while preserving invalid children when LLDB exposes them.
+
+    The normalized ABI-aware iterator remains the primary path. When it yields
+    no entries but the container still advertises visible children, we fall
+    back to raw indexed access so extraction can emit diagnostics for invalid
+    placeholders instead of silently dropping them.
+    """
+
+    entries = iter_container_values(value)
+    if entries:
+        return entries
+
+    try:
+        type_name = (value.GetTypeName() or "").lower()
+    except Exception:
+        type_name = ""
+    if "vector<" in type_name:
+        return []
+
+    raw_entries = []
+    for index in range(_safe_num_children(value)):
+        child = _safe_child_at_index(value, index)
+        if child is not None:
+            raw_entries.append(child)
+    return raw_entries
+
+
 def detect_structure_kind(valobj) -> Optional[str]:
     """Infer whether a value looks like a supported linear, tree, or graph container."""
 
@@ -284,10 +326,15 @@ def detect_structure_kind(valobj) -> Optional[str]:
     return None
 
 
-def extract_supported_structure(valobj, max_items: Optional[int] = None):
-    """Detect a supported structure kind and run the matching extraction routine."""
+def extract_supported_structure(
+    valobj,
+    max_items: Optional[int] = None,
+    structure_kind: Optional[str] = None,
+):
+    """Detect or reuse a structure kind and run the matching extraction routine."""
 
-    structure_kind = detect_structure_kind(valobj)
+    if structure_kind is None:
+        structure_kind = detect_structure_kind(valobj)
     if structure_kind == "linear":
         return structure_kind, extract_linear_structure(valobj, max_items=max_items)
     if structure_kind == "tree":
@@ -406,6 +453,7 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
         diagnostics=diagnostics,
         root_field=container_schema.root_field,
         size_field=container_schema.size_field,
+        root_ptr=container_schema.root_ptr,
     )
     if container_schema.size_member:
         extraction.size = container_schema.size_member.GetValueAsUnsigned()
@@ -415,7 +463,7 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
         diagnostics.warn("missing_root", "Could not find a valid root member.")
         return extraction
 
-    extraction.root_address = get_raw_pointer(container_schema.root_ptr)
+    extraction.root_address = get_raw_pointer(extraction.root_ptr)
     if extraction.root_address == 0:
         extraction.is_empty = True
         return extraction
@@ -423,7 +471,7 @@ def extract_tree_structure(valobj) -> ExtractedTreeStructure:
     visited_addrs = set()
     max_depth = g_config.tree_max_depth
     depth_limit_warned = False
-    stack = [(container_schema.root_ptr, 0)]
+    stack = [(extraction.root_ptr, 0)]
 
     while stack:
         node_ptr, depth = stack.pop()
@@ -531,7 +579,7 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
 
     node_map: Dict[int, GraphNode] = {}
     edge_set = set()
-    for index, node_entry in enumerate(iter_container_values(nodes_container)):
+    for index, node_entry in enumerate(_iter_container_entries_for_extraction(nodes_container)):
         node = _safe_get_node_from_pointer(node_entry)
         if not node or not node.IsValid():
             diagnostics.warn(
@@ -564,7 +612,9 @@ def extract_graph_structure(valobj) -> ExtractedGraphStructure:
 
         neighbors = get_resolved_child(node, node_schema.neighbors_field)
         if neighbors and neighbors.IsValid():
-            for neighbor_index, neighbor_entry in enumerate(iter_container_values(neighbors)):
+            for neighbor_index, neighbor_entry in enumerate(
+                _iter_container_entries_for_extraction(neighbors)
+            ):
                 neighbor = _safe_get_node_from_pointer(neighbor_entry)
                 if not neighbor or not neighbor.IsValid():
                     diagnostics.warn(

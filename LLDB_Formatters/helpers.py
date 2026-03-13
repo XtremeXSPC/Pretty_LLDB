@@ -37,6 +37,7 @@ class Colors:
 
 SUMMARY_CYCLE_MARKER = "[CYCLE]"
 SUMMARY_TRUNCATION_MARKER = "..."
+_TYPE_FIELD_NAME_CACHE = {}
 
 
 def debug_print(message):
@@ -56,6 +57,12 @@ def should_use_colors():
     The formatter currently treats the VS Code terminal environment as the
     primary signal that colored console output is appropriate.
     """
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+
+    if (os.environ.get("TERM") or "").lower() == "dumb":
+        return False
+
     return os.environ.get("TERM_PROGRAM") == "vscode"
 
 
@@ -67,10 +74,35 @@ def type_has_field(type_obj, field_name):
     lookup, which can be less predictable for synthetic or display-oriented
     values.
     """
-    for i in range(type_obj.GetNumberOfFields()):
-        if type_obj.GetFieldAtIndex(i).GetName() == field_name:
-            return True
-    return False
+    if not type_obj:
+        return False
+
+    try:
+        hash(type_obj)
+        cache_key = type_obj
+    except Exception:
+        cache_key = id(type_obj)
+    field_names = _TYPE_FIELD_NAME_CACHE.get(cache_key)
+    if field_names is None:
+        names = set()
+        try:
+            field_count = type_obj.GetNumberOfFields()
+        except Exception:
+            field_count = 0
+
+        for index in range(field_count):
+            try:
+                field = type_obj.GetFieldAtIndex(index)
+                name = field.GetName() if field else None
+            except Exception:
+                name = None
+            if name:
+                names.add(name)
+
+        field_names = frozenset(names)
+        _TYPE_FIELD_NAME_CACHE[cache_key] = field_names
+
+    return field_name in field_names
 
 
 def get_child_member_by_names(value, names):

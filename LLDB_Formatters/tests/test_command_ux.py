@@ -1,7 +1,8 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import LLDB_Formatters as formatter_package
+from LLDB_Formatters import registry as registry_module
 from LLDB_Formatters.config import formatter_config_command
 from LLDB_Formatters.diagnostics import formatter_explain_command
 from LLDB_Formatters.graph import export_graph_command
@@ -66,6 +67,21 @@ class TestCommandUX(unittest.TestCase):
                 seen_summary = True
             if item["type"] == "synthetic":
                 self.assertFalse(seen_summary)
+
+    def test_formatter_registry_ignores_duplicate_entries(self):
+        original_size = len(registry_module.FORMATTER_REGISTRY)
+        entry = {
+            "type": "summary",
+            "regex": "^DuplicateType$",
+            "function_path": "LLDB_Formatters.fake.duplicate",
+            "description": "Duplicate test entry",
+        }
+        try:
+            registry_module._register_formatter(entry)
+            registry_module._register_formatter(dict(entry))
+            self.assertEqual(len(registry_module.FORMATTER_REGISTRY), original_size + 1)
+        finally:
+            del registry_module.FORMATTER_REGISTRY[original_size:]
 
     def test_formatter_explain_usage_is_specific(self):
         result = MockResult()
@@ -242,6 +258,19 @@ class TestCommandUX(unittest.TestCase):
                 result = MockResult()
                 command_fn(debugger, command_text, result, {})
                 self.assertEqual(result.error, "Tree layout is unsupported.")
+
+    def test_formatter_help_respects_no_color(self):
+        result = MockResult()
+
+        with patch.dict(
+            "os.environ",
+            {"TERM_PROGRAM": "vscode", "NO_COLOR": "1"},
+            clear=False,
+        ):
+            formatter_package.formatter_help_command(None, "", result, {})
+
+        rendered = "\n".join(result.messages)
+        self.assertNotIn("\x1b[", rendered)
 
     def test_export_graph_reports_empty_graph_consistently(self):
         graph_value = MockSBValue(

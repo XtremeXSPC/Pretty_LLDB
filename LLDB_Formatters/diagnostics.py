@@ -112,5 +112,5 @@ def formatter_explain_command(debugger, command, result, internal_dict):
         )
         return
 
-    _, extraction = extract_supported_structure(valobj)
+    _, extraction = extract_supported_structure(valobj, structure_kind=structure_kind)
     result.AppendMessage(format_extraction_report(var_name, valobj, structure_kind, extraction))

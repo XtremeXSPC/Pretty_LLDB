@@ -1,8 +1,13 @@
 import unittest
 
-from LLDB_Formatters.extraction import extract_graph_structure, extract_linear_structure
+from LLDB_Formatters.extraction import (
+    extract_graph_structure,
+    extract_linear_structure,
+    extract_tree_structure,
+)
 from LLDB_Formatters.graph import GraphProvider, graph_node_summary_provider
 from LLDB_Formatters.linear import linear_container_summary_provider
+from LLDB_Formatters.schema_adapters import resolve_tree_container_schema
 from LLDB_Formatters.strategies import (
     InOrderTreeStrategy,
     PostOrderTreeStrategy,
@@ -166,6 +171,34 @@ class TestSchemaAdapters(unittest.TestCase):
         summary = strip_ansi(graph_node_summary_provider(node_a, {}))
 
         self.assertEqual(summary, "10 -> [20, 30]")
+
+    def test_tree_extraction_preserves_resolved_root_pointer(self):
+        root = MockSBValue(
+            2,
+            {"left": None, "right": None, "value": MockSBValue(2)},
+            type_name="MyTreeNode<int>",
+        )
+        tree_value = MockSBValue(
+            children={"root": root, "size": MockSBValue(1)},
+            type_name="MyTree<int>",
+        )
+
+        extraction = extract_tree_structure(tree_value)
+
+        self.assertIs(extraction.root_ptr, root)
+        self.assertEqual(extraction.root_address, root.GetAddress().GetFileAddress())
+
+    def test_unmatched_tree_container_schema_does_not_select_arbitrary_adapter(self):
+        tree_value = MockSBValue(
+            children={"mystery_root": MockSBValue(1)},
+            type_name="MysteryTree<int>",
+        )
+
+        schema = resolve_tree_container_schema(tree_value)
+
+        self.assertIsNone(schema.adapter_name)
+        self.assertIsNone(schema.root_field)
+        self.assertIsNone(schema.root_ptr)
 
 
 if __name__ == "__main__":
