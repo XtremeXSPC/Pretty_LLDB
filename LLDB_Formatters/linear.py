@@ -42,9 +42,11 @@ class LinearProvider:
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
         self.children = []
+        self._loaded = False
 
     def update(self):
         self.children = []
+        self._loaded = True
 
         current_ptr = resolve_linear_container_schema(self.valobj).head_ptr
         if not current_ptr or get_raw_pointer(current_ptr) == 0:
@@ -81,12 +83,16 @@ class LinearProvider:
                 break
             current_ptr = next_child
 
+    def _ensure_updated(self):
+        if not self._loaded:
+            self.update()
+
     def num_children(self):
-        self.update()
+        self._ensure_updated()
         return len(self.children)
 
     def get_child_at_index(self, index):
-        self.update()
+        self._ensure_updated()
         if 0 <= index < len(self.children):
             return self.children[index]
         return None

@@ -51,23 +51,29 @@ class GraphProvider:
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
         self.nodes_container = None
+        self._loaded = False
         # update() is called on-demand to ensure it has the latest state.
 
     def update(self):
         """Finds the container of nodes within the graph object."""
         self.nodes_container = resolve_graph_container_schema(self.valobj).nodes_container
+        self._loaded = True
+
+    def _ensure_updated(self):
+        if not self._loaded:
+            self.update()
 
     def num_children(self):
         """Returns the number of nodes to display as children."""
-        self.update()
+        self._ensure_updated()
         if self.nodes_container and self.nodes_container.IsValid():
-            return self.nodes_container.GetNumChildren()
+            return min(self.nodes_container.GetNumChildren(), g_config.synthetic_max_children)
         return 0
 
     def get_child_at_index(self, index):
         """Returns the i-th node from the nodes container."""
-        self.update()
-        if self.nodes_container:
+        self._ensure_updated()
+        if self.nodes_container and 0 <= index < self.num_children():
             return self.nodes_container.GetChildAtIndex(index)
         return None
 

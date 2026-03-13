@@ -48,26 +48,33 @@ from .synthetic_support import create_synthetic_child, parse_synthetic_child_ind
 from .visualization_options import create_tree_traversal_strategy
 
 
-def _collect_tree_nodes_by_address(root_ptr):
+def _collect_tree_nodes_by_address(root_ptr, wanted_addresses=None):
     nodes_by_address = {}
     visited_addrs = set()
+    wanted = set(wanted_addresses) if wanted_addresses else None
+    stack = [root_ptr]
 
-    def _visit(node_ptr):
+    while stack:
+        node_ptr = stack.pop()
         node_addr = get_raw_pointer(node_ptr)
         if node_addr == 0 or node_addr in visited_addrs:
-            return
+            continue
         visited_addrs.add(node_addr)
 
         node = _safe_get_node_from_pointer(node_ptr)
         if not node or not node.IsValid():
-            return
+            continue
 
-        nodes_by_address[node_addr] = node
+        if wanted is None or node_addr in wanted:
+            nodes_by_address[node_addr] = node
+            if wanted is not None and len(nodes_by_address) >= len(wanted):
+                break
+
         schema = resolve_tree_node_schema(node)
-        for child_ptr in get_tree_children(node, schema):
-            _visit(child_ptr)
+        children = get_tree_children(node, schema)
+        for child_ptr in reversed(children):
+            stack.append(child_ptr)
 
-    _visit(root_ptr)
     return nodes_by_address
 
 
@@ -76,9 +83,11 @@ class TreeProvider:
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
         self.children = []
+        self._loaded = False
 
     def update(self):
         self.children = []
+        self._loaded = True
 
         root_ptr = resolve_tree_container_schema(self.valobj).root_ptr
         if not root_ptr or get_raw_pointer(root_ptr) == 0:
@@ -88,7 +97,10 @@ class TreeProvider:
             default_mode=g_config.tree_traversal_strategy
         )
         ordered_addresses = strategy.ordered_addresses(root_ptr, g_config.synthetic_max_children)
-        nodes_by_address = _collect_tree_nodes_by_address(root_ptr)
+        nodes_by_address = _collect_tree_nodes_by_address(
+            root_ptr,
+            wanted_addresses=ordered_addresses,
+        )
 
         for index, address in enumerate(ordered_addresses):
             node = nodes_by_address.get(address)
@@ -96,12 +108,16 @@ class TreeProvider:
             if child:
                 self.children.append(child)
 
+    def _ensure_updated(self):
+        if not self._loaded:
+            self.update()
+
     def num_children(self):
-        self.update()
+        self._ensure_updated()
         return len(self.children)
 
     def get_child_at_index(self, index):
-        self.update()
+        self._ensure_updated()
         if 0 <= index < len(self.children):
             return self.children[index]
         return None

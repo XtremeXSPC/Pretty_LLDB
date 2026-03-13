@@ -1,8 +1,10 @@
 import unittest
+from unittest.mock import patch
 
 from LLDB_Formatters.config import formatter_config_command, g_config
+from LLDB_Formatters.graph import GraphProvider
 from LLDB_Formatters.linear import LinearProvider
-from LLDB_Formatters.tests.mock_lldb import MockSBValue
+from LLDB_Formatters.tests.mock_lldb import MockSBValue, MockSBValueContainer
 from LLDB_Formatters.tree import TreeProvider
 
 
@@ -96,6 +98,36 @@ def _tree_fixture():
     return container
 
 
+def _graph_fixture():
+    node3 = MockSBValue(
+        children={"value": MockSBValue(30), "neighbors": MockSBValueContainer([])},
+        name="node3",
+        address=0x3300,
+        type_name="MyGraphNode<int>",
+    )
+    node2 = MockSBValue(
+        children={"value": MockSBValue(20), "neighbors": MockSBValueContainer([node3])},
+        name="node2",
+        address=0x3200,
+        type_name="MyGraphNode<int>",
+    )
+    node1 = MockSBValue(
+        children={"value": MockSBValue(10), "neighbors": MockSBValueContainer([node2])},
+        name="node1",
+        address=0x3100,
+        type_name="MyGraphNode<int>",
+    )
+    return MockSBValue(
+        children={
+            "nodes": MockSBValueContainer([node1, node2, node3]),
+            "num_nodes": MockSBValue(3),
+            "num_edges": MockSBValue(2),
+        },
+        name="my_graph",
+        type_name="MyGraph<int>",
+    )
+
+
 class TestSyntheticProviders(unittest.TestCase):
     def test_formatter_config_lists_synthetic_max_children(self):
         result = MockResult()
@@ -138,6 +170,16 @@ class TestSyntheticProviders(unittest.TestCase):
         finally:
             g_config.synthetic_max_children = original_limit
 
+    def test_linear_provider_caches_children_between_queries(self):
+        provider = LinearProvider(_linear_fixture(), {})
+
+        with patch.object(provider, "update", wraps=provider.update) as update_spy:
+            self.assertEqual(provider.num_children(), 3)
+            self.assertEqual(provider.get_child_at_index(0).GetName(), "[0]")
+            self.assertEqual(provider.get_child_at_index(1).GetName(), "[1]")
+
+        self.assertEqual(update_spy.call_count, 1)
+
     def test_tree_provider_follows_selected_traversal_strategy(self):
         original_strategy = g_config.tree_traversal_strategy
         original_limit = g_config.synthetic_max_children
@@ -167,6 +209,29 @@ class TestSyntheticProviders(unittest.TestCase):
         finally:
             g_config.tree_traversal_strategy = original_strategy
             g_config.synthetic_max_children = original_limit
+
+    def test_graph_provider_respects_synthetic_child_limit(self):
+        original_limit = g_config.synthetic_max_children
+        g_config.synthetic_max_children = 2
+        try:
+            provider = GraphProvider(_graph_fixture(), {})
+
+            self.assertEqual(provider.num_children(), 2)
+            self.assertEqual(provider.get_child_at_index(0).GetName(), "node1")
+            self.assertEqual(provider.get_child_at_index(1).GetName(), "node2")
+            self.assertIsNone(provider.get_child_at_index(2))
+        finally:
+            g_config.synthetic_max_children = original_limit
+
+    def test_graph_provider_caches_container_resolution_between_queries(self):
+        provider = GraphProvider(_graph_fixture(), {})
+
+        with patch.object(provider, "update", wraps=provider.update) as update_spy:
+            self.assertEqual(provider.num_children(), 3)
+            self.assertEqual(provider.get_child_at_index(0).GetName(), "node1")
+            self.assertEqual(provider.get_child_at_index(1).GetName(), "node2")
+
+        self.assertEqual(update_spy.call_count, 1)
 
 
 if __name__ == "__main__":
