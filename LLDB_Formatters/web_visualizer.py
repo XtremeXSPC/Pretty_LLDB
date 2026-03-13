@@ -40,6 +40,11 @@ from .extraction import (
     extract_tree_structure,
 )
 from .helpers import debug_print
+from .renderers import (
+    build_graph_renderer_payload,
+    build_list_renderer_payload,
+    build_tree_renderer_payload,
+)
 
 # ----------------------------------------------------------------------- #
 # SECTION 1: PRIVATE HELPER FUNCTIONS
@@ -85,32 +90,7 @@ def _build_visjs_data_for_list(valobj):
     extracted_list = extract_linear_structure(valobj)
     if extracted_list.error_message or extracted_list.is_empty:
         return None
-
-    nodes_data = []
-    edges_data = []
-    for node in extracted_list.nodes:
-        nodes_data.append(
-            {
-                "id": f"0x{node.address:x}",
-                "value": node.value,
-                "address": f"0x{node.address:x}",
-            }
-        )
-        if node.next_address != 0:
-            edges_data.append(
-                {
-                    "from": f"0x{node.address:x}",
-                    "to": f"0x{node.next_address:x}",
-                }
-            )
-
-    return {
-        "nodes_data": nodes_data,
-        "edges_data": edges_data,
-        "traversal_order": extracted_list.traversal_order,
-        "list_size": extracted_list.size if extracted_list.size is not None else 0,
-        "is_doubly_linked": extracted_list.is_doubly_linked,
-    }
+    return build_list_renderer_payload(extracted_list)
 
 
 def _build_visjs_data_for_graph(valobj):
@@ -120,30 +100,9 @@ def _build_visjs_data_for_graph(valobj):
     Returns None if the graph is empty or its structure cannot be determined.
     """
     extracted_graph = extract_graph_structure(valobj)
-    if extracted_graph.is_empty:
+    if extracted_graph.is_empty or extracted_graph.error_message:
         return None
-
-    nodes = []
-    edges = []
-    for node in extracted_graph.nodes:
-        nodes.append(
-            {
-                "id": f"0x{node.address:x}",
-                "label": node.value,
-                "title": f"Value: {node.value}",
-                "address": f"0x{node.address:x}",
-            }
-        )
-
-    for edge in extracted_graph.edges:
-        edges.append(
-            {
-                "from": f"0x{edge.source:x}",
-                "to": f"0x{edge.target:x}",
-                "arrows": "to",
-            }
-        )
-    return {"nodes_data": nodes, "edges_data": edges}
+    return build_graph_renderer_payload(extracted_graph, directed=True)
 
 
 # ----------------------------------------------------------------------- #
@@ -214,27 +173,14 @@ def generate_tree_visualization_html(valobj):
     extracted_tree = extract_tree_structure(valobj)
     if extracted_tree.is_empty or extracted_tree.error_message:
         return None
-
-    nodes_data = []
-    edges_data = []
-    for node in extracted_tree.nodes:
-        nodes_data.append(
-            {
-                "id": f"0x{node.address:x}",
-                "label": node.value,
-                "title": f"Value: {node.value}\nAddress: 0x{node.address:x}",
-                "address": f"0x{node.address:x}",
-            }
-        )
-    for edge in extracted_tree.edges:
-        edges_data.append({"from": f"0x{edge.source:x}", "to": f"0x{edge.target:x}"})
+    tree_data = build_tree_renderer_payload(extracted_tree)
 
     # ----- UNIFIED INFO TABLE GENERATION ------ #
     info = {
         "Variable Name": valobj.GetName(),
         "Type Name": valobj.GetTypeName(),
-        "Size": extracted_tree.size if extracted_tree.size is not None else "N/A",
-        "Root Address": f"0x{extracted_tree.root_address:x}",
+        "Size": tree_data["tree_size"],
+        "Root Address": tree_data["root_address"],
     }
     info_html = "<h3>Tree Information</h3><table>"
     for key, value in info.items():
@@ -242,8 +188,8 @@ def generate_tree_visualization_html(valobj):
     info_html += "</table>"
 
     template_data = {
-        "__NODES_DATA__": json.dumps(nodes_data),
-        "__EDGES_DATA__": json.dumps(edges_data),
+        "__NODES_DATA__": json.dumps(tree_data["nodes_data"]),
+        "__EDGES_DATA__": json.dumps(tree_data["edges_data"]),
         "__TYPE_INFO_HTML__": info_html,  # Pass the full HTML block
     }
     return _generate_html("tree_visualizer.html", template_data)

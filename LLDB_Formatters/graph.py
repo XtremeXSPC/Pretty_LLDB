@@ -27,6 +27,7 @@ from .helpers import (
     get_value_summary,
 )
 from .registry import register_summary, register_synthetic
+from .renderers import render_graph_dot
 from .schema_adapters import (
     get_resolved_child,
     resolve_graph_container_schema,
@@ -176,18 +177,11 @@ def export_graph_command(debugger, command, result, internal_dict):
         result.AppendMessage(empty_structure_message("graph"))
         return
 
-    dot_lines = ["digraph G {", '  rankdir="LR";', "  node [shape=circle];"]
-    for node in extracted_graph.nodes:
-        val_summary = node.value.replace('"', '\\"')
-        dot_lines.append(f'  Node_{node.address} [label="{val_summary}"];')
-
-    for edge in extracted_graph.edges:
-        dot_lines.append(f"  Node_{edge.source} -> Node_{edge.target};")
-    dot_lines.append("}")
+    dot_content = render_graph_dot(extracted_graph, directed=True)
 
     try:
         with open(output_filename, "w") as f:
-            f.write("\n".join(dot_lines))
+            f.write(dot_content)
         result.AppendMessage(f"Successfully exported graph to '{output_filename}'.")
         result.AppendMessage(f"Run: dot -Tpng {output_filename} -o graph.png")
     except IOError as e:

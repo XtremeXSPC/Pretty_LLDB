@@ -35,6 +35,7 @@ from .helpers import (
     should_use_colors,
 )
 from .registry import register_summary, register_synthetic
+from .renderers import render_tree_dot
 from .schema_adapters import (
     get_resolved_child,
     get_tree_children,
@@ -324,8 +325,6 @@ def export_tree_command(debugger, command, result, internal_dict):
         result.AppendMessage(empty_structure_message("tree"))
         return
 
-    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
-
     # Define available strategies.
     strategy_map = {
         "preorder": PreOrderTreeStrategy(),
@@ -342,19 +341,12 @@ def export_tree_command(debugger, command, result, internal_dict):
         strategy = PreOrderTreeStrategy()
         should_annotate = False
 
-    # Generate the main body of the .dot file using the selected strategy.
-    dot_body, _ = strategy.traverse_for_dot(root_node_ptr, annotate=should_annotate)
+    traversal_addresses = None
+    root_node_ptr = resolve_tree_container_schema(tree_val).root_ptr
+    if should_annotate:
+        traversal_addresses = strategy.ordered_addresses(root_node_ptr)
 
-    # Assemble the full .dot file content.
-    dot_lines = [
-        "digraph Tree {",
-        '  graph [rankdir="TD"];',
-        "  node [shape=circle, style=filled, fillcolor=lightblue];",
-        "  edge [arrowhead=vee];",
-        *dot_body,
-        "}",
-    ]
-    dot_content = "\n".join(dot_lines)
+    dot_content = render_tree_dot(extraction, traversal_order=traversal_addresses)
 
     try:
         with open(output_filename, "w") as f:

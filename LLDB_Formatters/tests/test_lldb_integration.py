@@ -221,6 +221,19 @@ class TestLLDBIntegration(unittest.TestCase):
         self.assertIn('label="30"', dot_content)
         self.assertIn("->", dot_content)
 
+    def test_export_tree_command_creates_dot_output(self):
+        output_file = Path(tempfile.mkdtemp(prefix="tree-export-", dir=RUNTIME_ROOT)) / "tree.dot"
+        output = self._run_commands([f"export_tree my_tree {output_file} inorder"])
+
+        self.assertIn("Successfully exported tree", output)
+        self.assertTrue(output_file.exists(), "Expected tree.dot to be created.")
+
+        dot_content = output_file.read_text(encoding="utf-8")
+        self.assertIn('label="1: 1"', dot_content)
+        self.assertIn('label="2: 2"', dot_content)
+        self.assertIn('label="3: 3"', dot_content)
+        self.assertIn("->", dot_content)
+
 
 if __name__ == "__main__":
     unittest.main()
