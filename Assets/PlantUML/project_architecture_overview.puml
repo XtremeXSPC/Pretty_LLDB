@@ -1,0 +1,114 @@
+@startuml
+title Pretty LLDB - Architectural Overview
+
+top to bottom direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam linetype polyline
+skinparam nodesep 90
+skinparam ranksep 90
+skinparam dpi 180
+
+actor "LLDB Runtime" as lldb
+
+package "Debugger Integration Layer" {
+  component "Module Initialization\n__init__.py" as init
+  component "Formatter Entry Points\nlinear.py / tree.py / graph.py" as entrypoints
+  component "Interactive Commands\nweb_visualizer.py / diagnostics.py / config.py" as commands
+}
+
+package "Semantic Runtime Layer" {
+  component "Registry + Command Infrastructure\nregistry.py / command_helpers.py /\nsummary_contract.py / synthetic_support.py" as infrastructure
+  component "Schema Resolution + Pointer Semantics\nschema_adapters.py / pointers.py / helpers.py" as semantics
+  component "Extraction Layer\nextraction.py" as extraction
+  component "Traversal Strategies\nstrategies.py" as traversal
+}
+
+package "Rendering Layer" {
+  component "Renderer Pipeline\nrenderers.py" as renderers
+  component "Visualization Options\nvisualization_options.py" as viz_options
+}
+
+package "Asset Layer" {
+  component "HTML Templates\ntemplates/*.html" as templates
+  component "Static Assets\ntemplates/static/*" as static_assets
+}
+
+package "Shared Contracts" {
+  database "Normalized Models\nLinear / Tree / Graph" as models
+  component "ABI Probing\nabi_layouts.py" as abi
+  component "Runtime Config\nFormatterConfig" as runtime_config
+}
+
+lldb --> init
+init --> infrastructure
+init --> entrypoints
+init --> commands
+
+entrypoints --> extraction
+entrypoints --> traversal
+entrypoints --> renderers
+entrypoints --> infrastructure
+entrypoints --> runtime_config
+
+commands --> extraction
+commands --> renderers
+commands --> viz_options
+commands --> templates
+commands --> runtime_config
+
+extraction --> semantics
+extraction --> abi
+extraction --> models
+
+traversal --> semantics
+traversal --> runtime_config
+traversal --> models
+
+renderers --> models
+renderers --> templates
+
+templates --> static_assets
+commands --> static_assets
+
+runtime_config --> commands
+runtime_config --> entrypoints
+runtime_config --> traversal
+runtime_config --> extraction
+
+infrastructure -[hidden]-> semantics
+semantics -[hidden]-> extraction
+extraction -[hidden]-> traversal
+traversal -[hidden]-> renderers
+renderers -[hidden]-> templates
+templates -[hidden]-> static_assets
+
+note right of models
+  Main internal contract used by:
+  - summaries
+  - synthetic providers
+  - exports
+  - web visualizers
+end note
+
+note bottom of semantics
+  Semantic adapters and ABI-aware probing
+  replace earlier heuristic-only
+  recognition paths.
+end note
+
+note left of entrypoints
+  LLDB-facing surface:
+  summaries, synthetic children,
+  DOT export, and console output.
+end note
+
+note left of commands
+  Command surface:
+  formatter_explain,
+  formatter_config,
+  weblist/webtree/webgraph.
+end note
+
+@enduml

@@ -1,0 +1,124 @@
+@startuml
+title Pretty LLDB - Module Dependency Map
+
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam linetype polyline
+skinparam nodesep 80
+skinparam ranksep 90
+skinparam dpi 180
+
+package "LLDB Entry Surface" {
+  [__init__.py] as init
+  [linear.py] as linear
+  [tree.py] as tree
+  [graph.py] as graph
+  [web_visualizer.py] as web
+  [diagnostics.py] as diagnostics
+  [config.py] as config
+}
+
+package "Core Runtime" {
+  [registry.py] as registry
+  [command_helpers.py] as command_helpers
+  [summary_contract.py] as summary_contract
+  [synthetic_support.py] as synthetic_support
+  [helpers.py] as helpers
+  [pointers.py] as pointers
+  [schema_adapters.py] as adapters
+  [abi_layouts.py] as abi
+  [extraction.py] as extraction
+  [strategies.py] as strategies
+  [renderers.py] as renderers
+  [visualization_options.py] as visualization_options
+}
+
+package "Packaged Web Assets" {
+  [templates/*.html] as templates
+  [templates/static/*] as static_assets
+}
+
+init --> registry
+init --> linear
+init --> tree
+init --> graph
+init --> web
+init --> diagnostics
+init --> config
+
+linear --> extraction : extract
+linear --> abi : abi
+linear --> synthetic_support : synth
+linear --> summary_contract : summary
+linear --> helpers : helpers
+
+tree --> extraction : extract
+tree --> strategies : traverse
+tree --> renderers : render
+tree --> synthetic_support : synth
+tree --> summary_contract : summary
+tree --> visualization_options : options
+tree --> command_helpers : commands
+
+graph --> extraction : extract
+graph --> renderers : render
+graph --> summary_contract : summary
+graph --> command_helpers : commands
+graph --> visualization_options : options
+
+web --> extraction : extract
+web --> renderers : payloads
+web --> visualization_options : options
+web --> templates : html
+templates --> static_assets
+
+diagnostics --> extraction : explain
+diagnostics --> command_helpers : resolve
+
+extraction --> adapters : roles
+extraction --> helpers : helpers
+extraction --> abi : iterate
+
+adapters --> pointers : pointers
+adapters --> helpers : fields
+strategies --> adapters : roles
+strategies --> helpers : traverse
+renderers --> extraction : models
+
+init -[hidden]-> linear
+linear -[hidden]-> tree
+tree -[hidden]-> graph
+graph -[hidden]-> web
+web -[hidden]-> diagnostics
+registry -[hidden]-> command_helpers
+command_helpers -[hidden]-> summary_contract
+summary_contract -[hidden]-> synthetic_support
+synthetic_support -[hidden]-> helpers
+helpers -[hidden]-> pointers
+pointers -[hidden]-> adapters
+adapters -[hidden]-> abi
+abi -[hidden]-> extraction
+extraction -[hidden]-> strategies
+strategies -[hidden]-> renderers
+renderers -[hidden]-> visualization_options
+templates -[hidden]-> static_assets
+
+note right of extraction
+  Fine-grained dependency view.
+  Best used together with the
+  architectural overview diagram.
+end note
+
+legend left
+  Arrow label legend
+  --
+  extract  : uses extraction layer
+  render   : uses renderer/export layer
+  synth    : uses synthetic helpers
+  summary  : uses summary policy
+  options  : parses command options
+endlegend
+
+@enduml

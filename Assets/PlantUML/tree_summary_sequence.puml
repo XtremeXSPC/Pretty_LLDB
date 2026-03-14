@@ -1,0 +1,56 @@
+@startuml
+title Pretty LLDB - Tree Summary Sequence
+
+skinparam shadowing false
+skinparam responseMessageBelowArrow true
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 25
+skinparam BoxPadding 12
+skinparam dpi 180
+
+actor LLDB
+participant "tree_summary_provider" as TreeSummary
+participant "extract_tree_structure" as ExtractTree
+participant "resolve_tree_container_schema" as ResolveContainer
+participant "resolve_tree_node_schema" as ResolveNode
+participant "create_tree_traversal_strategy" as MakeStrategy
+participant "TreeTraversalStrategy.traverse" as Traverse
+participant "append_incomplete_marker" as Incomplete
+
+LLDB -> TreeSummary : summary request
+TreeSummary -> ExtractTree : extract tree
+ExtractTree -> ResolveContainer : resolve container
+loop iterative extraction
+  ExtractTree -> ResolveNode : resolve node
+  ExtractTree -> ExtractTree : collect data
+end
+ExtractTree --> TreeSummary : ExtractedTreeStructure
+
+TreeSummary -> MakeStrategy : build strategy
+MakeStrategy --> TreeSummary : strategy + name
+
+TreeSummary -> Traverse : traverse(root_ptr)
+loop iterative traversal
+  Traverse -> ResolveNode : resolve node
+  Traverse -> Traverse : order values
+end
+Traverse --> TreeSummary : values + metadata
+
+TreeSummary -> Incomplete : mark incomplete
+Incomplete --> TreeSummary : final summary
+TreeSummary --> LLDB : formatted one-line summary
+
+note right of ExtractTree
+  Extraction is schema-driven and
+  preserves diagnostics for the
+  formatter_explain command.
+end note
+
+note right of Traverse
+  Traversal order is decoupled from
+  extraction so summaries, synthetic
+  children, and exports can share
+  the same semantics.
+end note
+
+@enduml

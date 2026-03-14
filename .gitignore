@@ -12,6 +12,7 @@
 .idea/**/dictionaries
 .idea/**/shelf
 /docs/
+/Assets/PlantUML/Generated/
 
 # AWS User-specific
 .idea/**/aws.xml

@@ -1,0 +1,131 @@
+@startuml
+title Pretty LLDB - Extraction Domain Model
+
+left to right direction
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam nodesep 80
+skinparam ranksep 80
+skinparam dpi 180
+hide empty methods
+
+package "Diagnostics" {
+  class FieldResolution {
+    +role: str
+    +candidates: Tuple[str, ...]
+    +matched: Optional[str]
+  }
+
+  class ExtractionWarning {
+    +code: str
+    +message: str
+  }
+
+  class ExtractionDiagnostics {
+    +structure_kind: str
+    +field_resolutions: List[FieldResolution]
+    +warnings: List[ExtractionWarning]
+  }
+}
+
+package "Linear Model" {
+  class LinearNode {
+    +address: int
+    +value: str
+    +next_address: int
+  }
+
+  class ExtractedLinearStructure {
+    +diagnostics: ExtractionDiagnostics
+    +size: Optional[int]
+    +head_field: Optional[str]
+    +size_field: Optional[str]
+    +next_field: Optional[str]
+    +value_field: Optional[str]
+    +is_empty: bool
+    +is_doubly_linked: bool
+    +cycle_detected: bool
+    +truncated: bool
+    +error_message: Optional[str]
+    +nodes: List[LinearNode]
+    +traversal_order: List[str]
+  }
+}
+
+package "Tree Model" {
+  class TreeNode {
+    +address: int
+    +value: str
+    +children: List[int]
+  }
+
+  class TreeEdge {
+    +source: int
+    +target: int
+  }
+
+  class ExtractedTreeStructure {
+    +diagnostics: ExtractionDiagnostics
+    +size: Optional[int]
+    +root_field: Optional[str]
+    +size_field: Optional[str]
+    +value_field: Optional[str]
+    +child_mode: Optional[str]
+    +root_ptr: Optional[object]
+    +root_address: int
+    +is_empty: bool
+    +error_message: Optional[str]
+    +nodes: List[TreeNode]
+    +edges: List[TreeEdge]
+  }
+}
+
+package "Graph Model" {
+  class GraphNode {
+    +address: int
+    +value: str
+    +neighbors: List[int]
+  }
+
+  class GraphEdge {
+    +source: int
+    +target: int
+  }
+
+  class ExtractedGraphStructure {
+    +diagnostics: ExtractionDiagnostics
+    +size_field: Optional[str]
+    +edge_count_field: Optional[str]
+    +nodes_field: Optional[str]
+    +value_field: Optional[str]
+    +neighbors_field: Optional[str]
+    +num_nodes: Optional[int]
+    +num_edges: Optional[int]
+    +is_empty: bool
+    +error_message: Optional[str]
+    +nodes: List[GraphNode]
+    +edges: List[GraphEdge]
+  }
+}
+
+ExtractionDiagnostics *-- FieldResolution
+ExtractionDiagnostics *-- ExtractionWarning
+
+ExtractedLinearStructure *-- ExtractionDiagnostics
+ExtractedLinearStructure *-- LinearNode
+
+ExtractedTreeStructure *-- ExtractionDiagnostics
+ExtractedTreeStructure *-- TreeNode
+ExtractedTreeStructure *-- TreeEdge
+
+ExtractedGraphStructure *-- ExtractionDiagnostics
+ExtractedGraphStructure *-- GraphNode
+ExtractedGraphStructure *-- GraphEdge
+
+note right of ExtractedTreeStructure
+  Stores both structural data
+  and traversal entry metadata
+  such as root_ptr and root_address.
+end note
+
+@enduml

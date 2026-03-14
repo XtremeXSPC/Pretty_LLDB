@@ -1,0 +1,60 @@
+@startuml
+title Pretty LLDB - Web Visualizer Command Flow
+
+skinparam shadowing false
+skinparam responseMessageBelowArrow true
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 25
+skinparam BoxPadding 12
+skinparam dpi 180
+
+actor User
+participant LLDB
+participant "export_tree_web_command" as WebCommand
+participant "resolve_command_variable" as ResolveVar
+participant "extract_tree_structure" as ExtractTree
+participant "generate_tree_visualization_html" as GenerateHTML
+participant "create_tree_traversal_strategy" as MakeStrategy
+participant "build_tree_renderer_payload" as BuildPayload
+participant "_generate_html" as MaterializeHTML
+participant "_display_html_content" as DisplayHTML
+participant "CodeLLDB display_html" as CodeLLDB
+participant "Temp file + browser" as BrowserFallback
+
+User -> LLDB : webtree my_tree inorder
+LLDB -> WebCommand : invoke command
+WebCommand -> ResolveVar : resolve variable
+ResolveVar --> WebCommand : valobj
+
+WebCommand -> ExtractTree : extract tree
+ExtractTree --> WebCommand : ExtractedTreeStructure
+
+WebCommand -> GenerateHTML : generate HTML
+GenerateHTML -> MakeStrategy : resolve traversal
+MakeStrategy --> GenerateHTML : strategy + traversal name
+GenerateHTML -> BuildPayload : build payload
+BuildPayload --> GenerateHTML : nodes + edges + metadata
+GenerateHTML -> MaterializeHTML : materialize template
+MaterializeHTML --> GenerateHTML : self-contained HTML
+GenerateHTML --> WebCommand : html_content
+
+WebCommand -> DisplayHTML : display content
+alt IDE provides direct HTML display
+  DisplayHTML -> CodeLLDB : display_html(html_content)
+  CodeLLDB --> DisplayHTML : tab opened
+else browser fallback
+  DisplayHTML -> BrowserFallback : write temp file
+  BrowserFallback --> DisplayHTML : file opened
+end
+DisplayHTML --> WebCommand : success message
+WebCommand --> LLDB : command result
+
+note right of MaterializeHTML
+  The template layer combines:
+  - packaged HTML templates
+  - shared CSS / JavaScript assets
+  - JSON renderer payloads
+  - escaped metadata tables
+end note
+
+@enduml
