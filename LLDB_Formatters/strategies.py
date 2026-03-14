@@ -39,7 +39,6 @@ from .schema_adapters import (
 )
 
 
-# -------------------- Traversal Strategy Base Class -------------------- #
 class TraversalStrategy(ABC):
     """
     Define the common interface shared by all traversal strategy implementations.
@@ -72,7 +71,6 @@ class TraversalStrategy(ABC):
         return dot_lines, metadata
 
 
-# -------------------- Concrete Traversal Strategies -------------------- #
 class LinearTraversalStrategy(TraversalStrategy):
     """Traverse linear pointer-linked structures such as lists and queues."""
 
@@ -129,7 +127,6 @@ class LinearTraversalStrategy(TraversalStrategy):
         return values, metadata
 
 
-# ----------------- Tree Traversal Strategy Base Class ------------------ #
 def _result_limit_reached(results: List[object], max_items: Optional[int]) -> bool:
     """Return whether a traversal output list has reached its configured limit."""
 
@@ -203,9 +200,7 @@ def _schedule_tree_frames(order: str, payload: Dict[str, Any], node_ptr, depth: 
             frames.append(("enter", left_child, depth + 1, 0, None))
         return frames
 
-    frames = [
-        ("enter", child, depth + 1, 0, None) for child in reversed(payload["children"][1:])
-    ]
+    frames = [("enter", child, depth + 1, 0, None) for child in reversed(payload["children"][1:])]
     frames.append(visit_frame)
     if payload["children"]:
         frames.append(("enter", payload["children"][0], depth + 1, 0, None))
@@ -356,7 +351,6 @@ class TreeTraversalStrategy(TraversalStrategy):
         return [address for address in results if isinstance(address, int)]
 
 
-# ----------------- Concrete Tree Traversal Strategies ------------------ #
 class PreOrderTreeStrategy(TreeTraversalStrategy):
     """Traverse trees in pre-order, visiting the root before its children."""
 

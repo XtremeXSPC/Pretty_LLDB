@@ -14,7 +14,6 @@ Version: 0.5.0.dev0
 import re
 from typing import Iterable, Optional
 
-
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 

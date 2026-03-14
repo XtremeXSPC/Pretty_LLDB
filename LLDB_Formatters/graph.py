@@ -11,6 +11,7 @@ Version: 0.5.0.dev0
 """
 # ============================================================================ #
 
+from .abi_layouts import iter_container_values
 from .command_helpers import (
     empty_structure_message,
     find_variable,
@@ -18,7 +19,6 @@ from .command_helpers import (
     resolve_command_arguments,
     unsupported_layout_message,
 )
-from .abi_layouts import iter_container_values
 from .extraction import extract_graph_structure
 from .helpers import (
     SUMMARY_TRUNCATION_MARKER,

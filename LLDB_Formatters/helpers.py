@@ -47,7 +47,7 @@ def debug_print(message):
         print(f"[Formatter Debug] {message}")
 
 
-# --------------------------- Generic Helpers --------------------------- #
+# ----------------------------- GENERIC HELPERS ------------------------------ #
 
 
 def should_use_colors():

@@ -22,7 +22,7 @@ from . import config, diagnostics, graph, linear, registry, tree, web_visualizer
 from .helpers import Colors, should_use_colors
 
 
-# ---------------------------- Help Command ----------------------------- #
+# ------------------------------- HELP COMMAND ------------------------------- #
 def formatter_help_command(debugger, command, result, internal_dict):
     """
     Print the formatter command reference shown to LLDB users.
@@ -97,7 +97,7 @@ def _iter_formatter_registry_in_load_order():
     return sorted(registry.FORMATTER_REGISTRY, key=_formatter_load_order_key)
 
 
-# --------------------- LLDB Module Initialization ---------------------- #
+# ------------------------ LLDB MODULE INITIALIZATION ------------------------ #
 def __lldb_init_module(debugger, internal_dict):
     """
     Initialize the Pretty LLDB package inside the active LLDB session.
@@ -112,14 +112,14 @@ def __lldb_init_module(debugger, internal_dict):
 
     print("Loading custom formatters from 'LLDB_Formatters' package...")
 
-    # ----- 1. Category Setup ----- #
+    # --------------- CATEGORY SETUP ---------------- #
     category_name = "CustomFormatters"
     category = debugger.GetCategory(category_name)
     if not category.IsValid():
         category = debugger.CreateCategory(category_name)
     category.SetEnabled(True)
 
-    # ----- 2. Dynamic Formatter Registration ----- #
+    # ------- DYNAMIC FORMATTER REGISTRATION -------- #
     # Iterate over the registry populated by the @register decorators.
     for item in _iter_formatter_registry_in_load_order():
         regex = item["regex"]
@@ -146,20 +146,20 @@ def __lldb_init_module(debugger, internal_dict):
                 f"  - Registered synthetic: {class_path} for '{Colors.YELLOW}{regex}{Colors.RESET}'"
             )
 
-    # ----- 3. Register Custom LLDB Commands ----- #
+    # -------- REGISTER CUSTOM LLDB COMMANDS -------- #
     command_map = {
-        # Help and Config
+        # Help and Config.
         "formatter_help": "LLDB_Formatters.formatter_help_command",
         "formatter_config": "LLDB_Formatters.config.formatter_config_command",
         "formatter_explain": "LLDB_Formatters.diagnostics.formatter_explain_command",
-        # Console Tree
+        # Console Tree.
         "pptree_preorder": "LLDB_Formatters.tree.pptree_preorder_command",
         "pptree_inorder": "LLDB_Formatters.tree.pptree_inorder_command",
         "pptree_postorder": "LLDB_Formatters.tree.pptree_postorder_command",
-        # File Exporters
+        # File Exporters.
         "export_tree": "LLDB_Formatters.tree.export_tree_command",
         "export_graph": "LLDB_Formatters.graph.export_graph_command",
-        # Web Visualizers
+        # Web Visualizers.
         "weblist": "LLDB_Formatters.web_visualizer.export_list_web_command",
         "webtree": "LLDB_Formatters.web_visualizer.export_tree_web_command",
         "webgraph": "LLDB_Formatters.web_visualizer.export_graph_web_command",
@@ -167,14 +167,14 @@ def __lldb_init_module(debugger, internal_dict):
     for command, function_path in command_map.items():
         debugger.HandleCommand(f"command script add -f {function_path} {command}")
 
-    # ----- 4. Register Command Aliases ----- #
+    # --------------- COMMAND ALIASES --------------- #
     debugger.HandleCommand("command alias fhelp formatter_help")
     debugger.HandleCommand("command alias fexplain formatter_explain")
     debugger.HandleCommand("command alias pptree pptree_preorder")
     debugger.HandleCommand("command alias webt webtree")
     debugger.HandleCommand("command alias webg webgraph")
 
-    # ----- 5. Final Output Message ----- #
+    # ------- FINALIZATION AND USER FEEDBACK -------- #
     print(
         f"{Colors.GREEN}Formatters and commands registered in category '{category_name}'.{Colors.RESET}"
     )
